@@ -114,7 +114,7 @@ export interface ScreenshotRecord {
   createdAt: string;
 }
 
-export type ExportType = "skill-pack" | "markdown" | "playwright" | "devtools";
+export type ExportType = "skill-pack" | "markdown" | "playwright" | "devtools" | "docx" | "pdf";
 
 export interface ExportRecord {
   id: string;

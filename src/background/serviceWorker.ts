@@ -1,6 +1,8 @@
 import { db, getSessionBundle } from "../shared/db";
 import { RecentActionDeduper } from "../shared/actionIntegrity";
 import { generateDevtoolsRecorderJson, generateHumanGuide, generatePlaywright, generateSkillPackBase64 } from "../shared/exporters";
+import { generateDocx } from "../shared/exportDocx";
+import { generatePdf } from "../shared/exportPdf";
 import { generatedDescription, generatedTitle } from "../shared/stepText";
 import type { ActionPayload, AppMessage, AppResponse, ExportType, RecordedAction, RecordingSession, RecordingState, StorageEstimate } from "../shared/types";
 
@@ -578,12 +580,14 @@ const EXPORT_EXTENSION: Record<ExportType, string> = {
   "skill-pack": "zip",
   markdown: "md",
   playwright: "ts",
-  devtools: "json"
+  devtools: "json",
+  docx: "docx",
+  pdf: "pdf"
 };
 
 async function createExport(message: Extract<AppMessage, { type: "export:create" }>) {
   const bundle = await getSessionBundle(message.sessionId);
-  const slug = bundle.session.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "browser-agent-recording";
+  const slug = bundle.session.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "q-pros-manual-guide";
   const exportRecord = {
     id: id("export"),
     sessionId: message.sessionId,
@@ -592,6 +596,29 @@ async function createExport(message: Extract<AppMessage, { type: "export:create"
     createdAt: now()
   };
   await db.exports.add(exportRecord);
+
+  // Handle docx export
+  if (message.exportType === "docx") {
+    try {
+      const blob = await generateDocx(bundle);
+      const url = URL.createObjectURL(blob);
+      await chrome.downloads.download({ url, filename: exportRecord.filename, saveAs: true });
+      return { record: exportRecord, success: true };
+    } catch (error) {
+      return { record: exportRecord, error: error instanceof Error ? error.message : "Export failed" };
+    }
+  }
+
+  // Handle PDF export
+  if (message.exportType === "pdf") {
+    try {
+      await generatePdf(bundle);
+      return { record: exportRecord, success: true };
+    } catch (error) {
+      return { record: exportRecord, error: error instanceof Error ? error.message : "Export failed" };
+    }
+  }
+
   if (message.exportType === "markdown") return { record: exportRecord, content: generateHumanGuide(bundle) };
   if (message.exportType === "playwright") return { record: exportRecord, content: generatePlaywright(bundle) };
   if (message.exportType === "devtools") return { record: exportRecord, content: generateDevtoolsRecorderJson(bundle) };
@@ -664,13 +691,20 @@ chrome.runtime.onMessage.addListener((message: AppMessage, sender, sendResponse)
 // Keyboard shortcut (default Alt+Shift+R): toggle recording without opening the
 // popup. Start uses the active tab, mirroring the popup's Start button.
 chrome.commands?.onCommand.addListener(async (command) => {
-  if (command !== "toggle-recording") return;
-  try {
-    const state = await getState();
-    if (state.status === "recording") await stopRecording();
-    else await startRecording({ type: "recording:start" });
-  } catch {
-    /* e.g. active tab is a restricted page; surfaced next time the popup opens */
+  if (command === "toggle-recording") {
+    try {
+      const state = await getState();
+      if (state.status === "recording") await stopRecording();
+      else await startRecording({ type: "recording:start" });
+    } catch {
+      /* e.g. active tab is a restricted page; surfaced next time the popup opens */
+    }
+  }
+  if (command === "open-side-panel") {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      await chrome.sidePanel.open({ tabId: tab.id });
+    }
   }
 });
 

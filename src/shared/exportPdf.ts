@@ -1,0 +1,135 @@
+import { jsPDF } from "jspdf";
+import type { SessionBundle, RecordedAction, ScreenshotRecord } from "./types";
+
+function byActionId(screenshots: ScreenshotRecord[]) {
+  return new Map(screenshots.map((s) => [s.actionId, s]));
+}
+
+function actionDescription(action: RecordedAction): string {
+  if (action.type === "click") {
+    return `Click on "${action.target.ariaLabel || action.target.text || action.target.selector}"`;
+  }
+  if (action.type === "input") {
+    const base = `Type in "${action.target.ariaLabel || action.target.placeholder || action.target.selector}"`;
+    return action.value && action.valuePolicy !== "runtime" ? `${base}: ${action.value}` : base;
+  }
+  if (action.type === "keydown") return `Press key "${action.key}"`;
+  if (action.type === "navigation") return `Navigate to ${action.page.url}`;
+  if (action.type === "change") {
+    const base = `Change value in "${action.target.ariaLabel || action.target.selector}"`;
+    return action.value ? `${base}: ${action.value}` : base;
+  }
+  if (action.type === "submit") return "Submit form";
+  return `${action.type}`;
+}
+
+export async function generatePdf(bundle: SessionBundle): Promise<void> {
+  const screenshotMap = byActionId(bundle.screenshots);
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "pt",
+    format: "letter",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const contentWidth = pageWidth - 2 * margin;
+  let yPosition = margin;
+
+  // Title page
+  doc.setFontSize(32);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(26, 26, 46);
+  doc.text("Q-PROS Manual Guide", pageWidth / 2, yPosition + 20, { align: "center" });
+  yPosition += 50;
+
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(22, 33, 62);
+  doc.text(bundle.session.title, pageWidth / 2, yPosition, { align: "center" });
+  yPosition += 30;
+
+  doc.setFontSize(12);
+  doc.setTextColor(102, 102, 102);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: "center" });
+  yPosition += 20;
+  doc.text(`URL: ${bundle.session.startUrl || "N/A"}`, pageWidth / 2, yPosition, { align: "center" });
+  yPosition += 40;
+
+  // Separator line
+  doc.setDrawColor(4, 120, 87);
+  doc.setLineWidth(2);
+  doc.line(margin, yPosition, pageWidth - margin, yPosition);
+  yPosition += 30;
+
+  // Steps
+  bundle.actions.forEach((action, index) => {
+    const step = index + 1;
+    const screenshot = screenshotMap.get(action.id);
+
+    // Check if we need a new page (need at least 200pt for screenshot)
+    if (yPosition > pageHeight - 250) {
+      doc.addPage();
+      yPosition = margin;
+    }
+
+    // Step number + title
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(4, 120, 87);
+    doc.text(`Step ${step}: ${action.title}`, margin, yPosition);
+    yPosition += 22;
+
+    // Action description
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 51, 51);
+    const desc = actionDescription(action);
+    const descLines = doc.splitTextToSize(desc, contentWidth);
+    doc.text(descLines, margin, yPosition);
+    yPosition += descLines.length * 14 + 8;
+
+    // URL and time
+    doc.setFontSize(9);
+    doc.setTextColor(102, 102, 102);
+    doc.text(`URL: ${action.page.url}`, margin, yPosition);
+    yPosition += 12;
+    doc.text(`Time: ${new Date(action.createdAt).toLocaleString()}`, margin, yPosition);
+    yPosition += 16;
+
+    // Screenshot
+    if (screenshot) {
+      try {
+        const imgWidth = Math.min(contentWidth, 500);
+        const imgHeight = imgWidth * 0.6; // Approximate aspect ratio
+
+        // Check if screenshot fits on current page
+        if (yPosition + imgHeight > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        doc.addImage(screenshot.dataUrl, "JPEG", margin, yPosition, imgWidth, imgHeight);
+        yPosition += imgHeight + 20;
+      } catch {
+        doc.setFontSize(10);
+        doc.setTextColor(153, 153, 153);
+        doc.text("[Screenshot could not be embedded]", margin, yPosition);
+        yPosition += 20;
+      }
+    }
+
+    // Separator between steps
+    if (index < bundle.actions.length - 1) {
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 20;
+    }
+  });
+
+  // Save
+  const slug = bundle.session.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "q-pros-manual-guide";
+  doc.save(`${slug}.pdf`);
+}

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Browser Agent Recorder",
-  "description": "Record browser workflows and export local SOPs and Agent Skill Packs.",
-  "version": "0.1.0",
+  "name": "Q-PROS Manual Guide",
+  "description": "Record browser interactions and export manual test guides as Word/PDF documents.",
+  "version": "1.0.0",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -10,14 +10,17 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "Browser Agent Recorder",
+    "default_title": "Q-PROS Manual Guide",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
-    }
+    },
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "commands": {
     "toggle-recording": {
@@ -25,6 +28,12 @@
         "default": "Alt+Shift+R"
       },
       "description": "Start or stop recording"
+    },
+    "open-side-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
+      "description": "Open the step editor panel"
     }
   },
   "background": {
@@ -40,14 +49,14 @@
       "match_about_blank": true
     }
   ],
-  "permissions": ["activeTab", "tabs", "storage", "scripting"],
+  "permissions": ["activeTab", "tabs", "storage", "scripting", "sidePanel", "downloads"],
   "host_permissions": ["<all_urls>"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com"
   },
   "web_accessible_resources": [
     {
-      "resources": ["editor.html"],
+      "resources": ["editor.html", "sidepanel.html"],
       "matches": ["<all_urls>"]
     }
   ]

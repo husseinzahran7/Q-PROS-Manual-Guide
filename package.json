@@ -1,21 +1,21 @@
 {
-  "name": "browser-agent-recorder",
-  "version": "0.1.0",
+  "name": "q-pros-manual-guide",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Record browser workflows and export them as human SOPs and machine-readable Agent Skill Packs. Local-first Chrome MV3 extension.",
+  "description": "Record browser interactions and export manual test guides as Word/PDF documents. Chrome MV3 extension by Hussein Zahran.",
   "license": "MIT",
-  "homepage": "https://github.com/VelvetAbyss/browser-agent-recorder#readme",
+  "homepage": "https://github.com/husseinzahran7/Q-PROS-Manual-Guide#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/VelvetAbyss/browser-agent-recorder.git"
+    "url": "https://github.com/husseinzahran7/Q-PROS-Manual-Guide.git"
   },
   "bugs": {
-    "url": "https://github.com/VelvetAbyss/browser-agent-recorder/issues"
+    "url": "https://github.com/husseinzahran7/Q-PROS-Manual-Guide/issues"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build && BUILD_TARGET=content vite build",
+    "build": "tsc --noEmit && vite build && set BUILD_TARGET=content && vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "icons": "node scripts/generate-icons.mjs",
@@ -25,6 +25,8 @@
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
     "dexie": "^4.0.11",
+    "docx": "^9.7.1",
+    "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
