@@ -1,0 +1,294 @@
+/* =============================================================
+   Q-PROS Manual Guide — Sidepanel Styles
+   Uses the same design tokens from src/styles.css :root.
+============================================================= */
+
+/* ---------- Layout ---------- */
+.sp-root {
+  padding: 16px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* ---------- Header ---------- */
+.sp-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--accent), #ef6c68);
+  border-radius: 12px;
+  color: var(--bg-card);
+}
+.sp-header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.sp-header p {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+/* ---------- Section headings ---------- */
+.sp-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--fg-2);
+}
+
+/* ---------- Empty state ---------- */
+.sp-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+.sp-empty p:first-child {
+  font-size: 14px;
+}
+.sp-empty p:last-child {
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* ---------- Session cards ---------- */
+.sp-session-card {
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s var(--spring);
+}
+.sp-session-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px var(--accent-soft);
+}
+.sp-session-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sp-session-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--fg);
+}
+.sp-session-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ---------- Status badges ---------- */
+.sp-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+.sp-badge--recording {
+  background: #dcfce7;
+  color: #16a34a;
+}
+.sp-badge--idle {
+  background: var(--bg-elevated);
+  color: #64748b;
+}
+
+/* ---------- Back button ---------- */
+.sp-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 12px;
+  padding: 4px 0;
+}
+
+/* ---------- Session detail header ---------- */
+.sp-detail-header {
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.sp-detail-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.sp-detail-header p {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------- Export buttons ---------- */
+.sp-export-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.sp-export-btn {
+  flex: 1;
+  padding: 10px;
+  color: var(--bg-card);
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--spring);
+}
+.sp-export-btn:disabled {
+  background: var(--muted) !important;
+  cursor: not-allowed;
+}
+.sp-export-btn--docx {
+  background: var(--accent);
+}
+.sp-export-btn--docx:hover:not(:disabled) {
+  background: var(--accent-2);
+}
+.sp-export-btn--pdf {
+  background: var(--danger);
+}
+.sp-export-btn--pdf:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+/* ---------- Status message ---------- */
+.sp-status {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.sp-status--success {
+  background: var(--accent-tint);
+  color: var(--accent);
+  border: 1px solid var(--accent-soft);
+}
+.sp-status--error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+/* ---------- Loading ---------- */
+.sp-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+}
+
+/* ---------- Step cards ---------- */
+.sp-step-card {
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.sp-step-header {
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  transition: background 0.12s var(--spring);
+}
+.sp-step-header:hover {
+  background: var(--accent-tint);
+}
+.sp-step-header--expanded {
+  background: var(--accent-tint);
+}
+.sp-step-badge {
+  background: var(--accent);
+  color: var(--bg-card);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+.sp-step-icon {
+  font-size: 14px;
+}
+.sp-step-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-2);
+}
+.sp-step-chevron {
+  font-size: 11px;
+  color: var(--muted);
+}
+.sp-step-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--bg-elevated);
+}
+.sp-step-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin: 8px 0;
+}
+.sp-step-url,
+.sp-step-time {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 4px 0;
+}
+.sp-step-img {
+  width: 100%;
+  border-radius: 6px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+}
+
+/* ---------- Delete button ---------- */
+.sp-delete-btn {
+  margin-top: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s var(--spring);
+}
+.sp-delete-btn:hover {
+  background: #fee2e2;
+}
+
+/* ---------- Delete session (full-width) ---------- */
+.sp-delete-session {
+  width: 100%;
+  padding: 8px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s var(--spring);
+}
+.sp-delete-session:hover {
+  background: #fee2e2;
+}

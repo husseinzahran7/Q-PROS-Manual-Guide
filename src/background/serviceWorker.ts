@@ -337,14 +337,14 @@ function annotateScreenshot(dataUrl: string, payload: ActionPayload): Promise<st
     const radius = Math.min(12, w / 2, h / 2);
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, radius);
-    ctx.fillStyle = "rgba(4, 120, 87, 0.14)";
+    ctx.fillStyle = "rgba(224, 90, 85, 0.14)";
     ctx.fill();
     // White halo first for contrast on dark UIs, then the emerald ring.
     ctx.lineWidth = 5;
     ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
     ctx.stroke();
     ctx.lineWidth = 3;
-    ctx.strokeStyle = "#047857";
+    ctx.strokeStyle = "#E05A55";
     ctx.stroke();
   });
 }
@@ -585,6 +585,15 @@ const EXPORT_EXTENSION: Record<ExportType, string> = {
   pdf: "pdf"
 };
 
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function createExport(message: Extract<AppMessage, { type: "export:create" }>) {
   const bundle = await getSessionBundle(message.sessionId);
   const slug = bundle.session.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "q-pros-manual-guide";
@@ -601,8 +610,8 @@ async function createExport(message: Extract<AppMessage, { type: "export:create"
   if (message.exportType === "docx") {
     try {
       const blob = await generateDocx(bundle);
-      const url = URL.createObjectURL(blob);
-      await chrome.downloads.download({ url, filename: exportRecord.filename, saveAs: true });
+      const dataUri = await blobToDataUri(blob);
+      await chrome.downloads.download({ url: dataUri, filename: exportRecord.filename, saveAs: true });
       return { record: exportRecord, success: true };
     } catch (error) {
       return { record: exportRecord, error: error instanceof Error ? error.message : "Export failed" };
@@ -612,7 +621,9 @@ async function createExport(message: Extract<AppMessage, { type: "export:create"
   // Handle PDF export
   if (message.exportType === "pdf") {
     try {
-      await generatePdf(bundle);
+      const blob = await generatePdf(bundle);
+      const dataUri = await blobToDataUri(blob);
+      await chrome.downloads.download({ url: dataUri, filename: exportRecord.filename, saveAs: true });
       return { record: exportRecord, success: true };
     } catch (error) {
       return { record: exportRecord, error: error instanceof Error ? error.message : "Export failed" };

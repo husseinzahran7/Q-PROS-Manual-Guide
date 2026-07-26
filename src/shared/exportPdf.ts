@@ -23,7 +23,7 @@ function actionDescription(action: RecordedAction): string {
   return `${action.type}`;
 }
 
-export async function generatePdf(bundle: SessionBundle): Promise<void> {
+export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
   const screenshotMap = byActionId(bundle.screenshots);
   const doc = new jsPDF({
     orientation: "landscape",
@@ -58,7 +58,7 @@ export async function generatePdf(bundle: SessionBundle): Promise<void> {
   yPosition += 40;
 
   // Separator line
-  doc.setDrawColor(4, 120, 87);
+  doc.setDrawColor(224, 90, 85);
   doc.setLineWidth(2);
   doc.line(margin, yPosition, pageWidth - margin, yPosition);
   yPosition += 30;
@@ -77,7 +77,7 @@ export async function generatePdf(bundle: SessionBundle): Promise<void> {
     // Step number + title
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(4, 120, 87);
+    doc.setTextColor(224, 90, 85);
     doc.text(`Step ${step}: ${action.title}`, margin, yPosition);
     yPosition += 22;
 
@@ -129,7 +129,8 @@ export async function generatePdf(bundle: SessionBundle): Promise<void> {
     }
   });
 
-  // Save
-  const slug = bundle.session.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "q-pros-manual-guide";
-  doc.save(`${slug}.pdf`);
+  // Return blob instead of saving directly (Chrome extension compatibility)
+  // Use arraybuffer for better Chrome extension compatibility
+  const arrayBuffer = doc.output("arraybuffer");
+  return new Blob([arrayBuffer], { type: "application/pdf" });
 }

@@ -1,6 +1,7 @@
-// Generate the extension icon set (16/32/48/128 + 512 store master) with no
-// image dependencies — renders a rounded emerald square with a white "record"
-// dot at 4x supersampling and encodes PNG via Node's built-in zlib.
+// Generate the extension icon set (16/32/48/128 + 512 store master) from the
+// SVG logo — renders the Q-PROS badge (grey circle, white ring, red center,
+// white checkmark, red ribbons) at 4x supersampling and encodes PNG via
+// Node's built-in zlib.
 //
 // Run: node scripts/generate-icons.mjs   (output: public/icons/icon-*.png)
 import { deflateSync } from "node:zlib";
@@ -10,8 +11,12 @@ import { fileURLToPath } from "node:url";
 
 const outDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public", "icons");
 const SS = 4; // supersampling factor for anti-aliasing
-const EMERALD = [4, 120, 87];
-const WHITE = [255, 255, 255];
+
+// Logo colours (from icon.svg)
+const GREY = [124, 124, 124];      // #7C7C7C outer circle
+const WHITE = [255, 255, 255];     // #FFFFFF ring + checkmark
+const RED = [224, 90, 85];         // #E05A55 center circle + ribbons
+const TRANSPARENT = [0, 0, 0, 0];
 
 // --- CRC32 (PNG chunk checksum) ---
 const crcTable = (() => {
@@ -51,50 +56,140 @@ function encodePng(width, height, rgba) {
   return Buffer.concat([sig, chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
 }
 
-// Rounded-rect signed test: distance pushed to 0 inside.
-function inRoundedRect(px, py, x0, y0, x1, y1, r) {
-  if (px < x0 || px > x1 || py < y0 || py > y1) return false;
-  const dx = Math.max(x0 + r - px, 0, px - (x1 - r));
-  const dy = Math.max(y0 + r - py, 0, py - (y1 - r));
-  return dx * dx + dy * dy <= r * r;
+// --- Geometry helpers (SVG viewBox 0 0 100 130) ---
+// Coordinate system: SVG space mapped to pixel space with supersampling.
+
+function distToCircle(px, py, cx, cy, r) {
+  return Math.hypot(px - cx, py - cy) - r;
+}
+
+// Point-in-triangle test (ribbons)
+function inTriangle(px, py, x0, y0, x1, y1, x2, y2) {
+  const d1 = (px - x1) * (y0 - y1) - (x0 - x1) * (py - y1);
+  const d2 = (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2);
+  const d3 = (px - x0) * (y2 - y0) - (x2 - x0) * (py - y0);
+  const hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+  const hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+  return !(hasNeg && hasPos);
+}
+
+// Check if point is inside the checkmark stroke (thick line segment)
+function distToSegment(px, py, x0, y0, x1, y1, thickness) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x0, py - y0);
+  let t = ((px - x0) * dx + (py - y0) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const projX = x0 + t * dx;
+  const projY = y0 + t * dy;
+  return Math.hypot(px - projX, py - projY) - thickness;
+}
+
+// Smooth edge helper: returns alpha 0-255 based on signed distance
+function smoothEdge(dist, softness) {
+  if (dist <= -softness) return 255;
+  if (dist >= softness) return 0;
+  return Math.round(255 * (0.5 - dist / (2 * softness)));
 }
 
 function renderIcon(size) {
   const hi = size * SS;
-  const margin = hi * 0.04;
-  const radius = hi * 0.22;
-  const cx = hi / 2;
-  const cy = hi / 2;
-  const dotR = hi * 0.26;
   const out = Buffer.alloc(size * size * 4);
+
+  // SVG viewBox: 0 0 100 130 — map to hi×hi with aspect ratio preserved
+  // Use uniform scale, center horizontally, align top
+  const svgW = 100;
+  const svgH = 130;
+  const scale = hi / Math.max(svgW, svgH);
+  const offsetX = (hi - svgW * scale) / 2;
+  const offsetY = (hi - svgH * scale) / 2;
+
+  function toScreen(sx, sy) {
+    return [offsetX + sx * scale, offsetY + sy * scale];
+  }
+
+  const softness = scale * 0.5; // anti-aliasing edge width in hi-res pixels
 
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
+      let r = 0, g = 0, b = 0, a = 0;
+      let covered = 0;
       for (let sy = 0; sy < SS; sy += 1) {
         for (let sx = 0; sx < SS; sx += 1) {
           const hx = x * SS + sx + 0.5;
           const hy = y * SS + sy + 0.5;
-          if (!inRoundedRect(hx, hy, margin, margin, hi - margin, hi - margin, radius)) continue;
-          const inDot = (hx - cx) ** 2 + (hy - cy) ** 2 <= dotR * dotR;
-          const [pr, pg, pb] = inDot ? WHITE : EMERALD;
+
+          // Map to SVG coordinate space
+          const svgX = (hx - offsetX) / scale;
+          const svgY = (hy - offsetY) / scale;
+
+          let pr, pg, pb, pa;
+
+          // Layer 1: Red ribbons (behind the circle)
+          // Left ribbon: M30 80 L15 125 L35 110 L50 120 Z
+          if (inTriangle(svgX, svgY, 30, 80, 15, 125, 35, 110) ||
+              inTriangle(svgX, svgY, 30, 80, 35, 110, 50, 120)) {
+            [pr, pg, pb] = RED;
+            pa = 255;
+          }
+          // Right ribbon: M70 80 L85 125 L65 110 L50 120 Z
+          else if (inTriangle(svgX, svgY, 70, 80, 85, 125, 65, 110) ||
+                   inTriangle(svgX, svgY, 70, 80, 65, 110, 50, 120)) {
+            [pr, pg, pb] = RED;
+            pa = 255;
+          }
+          // Layer 2: Outer grey circle (cx=50 cy=50 r=45)
+          else if (distToCircle(svgX, svgY, 50, 50, 45) <= 0) {
+            [pr, pg, pb] = GREY;
+            pa = 255;
+          }
+          else {
+            pa = 0; pr = 0; pg = 0; pb = 0;
+          }
+
+          // Layer 3: Inner white ring (cx=50 cy=50 r=35) — on top of grey
+          if (pa > 0 && distToCircle(svgX, svgY, 50, 50, 35) <= 0) {
+            [pr, pg, pb] = WHITE;
+          }
+
+          // Layer 4: Center red circle (cx=50 cy=50 r=28) — on top of white
+          if (pa > 0 && distToCircle(svgX, svgY, 50, 50, 28) <= 0) {
+            [pr, pg, pb] = RED;
+          }
+
+          // Layer 5: White checkmark — on top of red center
+          // Checkmark: M38 52 L46 60 L62 40 (two segments)
+          if (pa > 0) {
+            const d1 = distToSegment(svgX, svgY, 38, 52, 46, 60, 3);
+            const d2 = distToSegment(svgX, svgY, 46, 60, 62, 40, 3);
+            const dCheck = Math.min(d1, d2);
+            if (dCheck <= 0) {
+              [pr, pg, pb] = WHITE;
+            }
+          }
+
+          // Anti-alias the outer circle edge
+          if (pa === 0) {
+            const outerDist = distToCircle(svgX, svgY, 50, 50, 45);
+            if (outerDist > -softness && outerDist < softness) {
+              pa = smoothEdge(outerDist, softness);
+              [pr, pg, pb] = GREY;
+            }
+          }
+
           r += pr;
           g += pg;
           b += pb;
-          a += 255;
+          a += pa;
+          if (pa > 0) covered += 1;
         }
       }
       const samples = SS * SS;
       const idx = (y * size + x) * 4;
-      // Average straight RGBA; covered samples carry their colour, uncovered
-      // contribute transparency only.
-      const covered = a / 255;
-      out[idx] = covered ? Math.round(r / covered) : 0;
-      out[idx + 1] = covered ? Math.round(g / covered) : 0;
-      out[idx + 2] = covered ? Math.round(b / covered) : 0;
+      out[idx] = covered > 0 ? Math.round(r / covered) : 0;
+      out[idx + 1] = covered > 0 ? Math.round(g / covered) : 0;
+      out[idx + 2] = covered > 0 ? Math.round(b / covered) : 0;
       out[idx + 3] = Math.round(a / samples);
     }
   }

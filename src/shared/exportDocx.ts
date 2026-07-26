@@ -122,7 +122,7 @@ export async function generateDocx(bundle: SessionBundle): Promise<Blob> {
             text: `Step ${step}`,
             bold: true,
             size: 28,
-            color: "047857",
+            color: "E05A55",
           }),
         ],
         heading: HeadingLevel.HEADING_2,

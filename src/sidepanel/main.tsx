@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import type { RecordingSession, RecordedAction, ScreenshotRecord, SessionBundle } from "../shared/types";
+import "./styles.css";
 
 function send<T>(message: unknown): Promise<{ ok: boolean; data?: T; error?: string }> {
   return chrome.runtime.sendMessage(message);
@@ -21,99 +22,47 @@ function StepCard({
 
   const actionIcon = () => {
     switch (action.type) {
-      case "click": return "🖱️";
-      case "input": return "⌨️";
-      case "keydown": return "🔑";
-      case "navigation": return "🔗";
-      case "change": return "📝";
-      case "submit": return "📤";
-      case "note": return "📌";
-      case "wait": return "⏱️";
-      default: return "▶️";
+      case "click": return "\u{1F5B1}\uFE0F";
+      case "input": return "\u2328\uFE0F";
+      case "keydown": return "\U0001F511";
+      case "navigation": return "\U0001F517";
+      case "change": return "\U0001F4DD";
+      case "submit": return "\U0001F4E4";
+      case "note": return "\U0001F4CC";
+      case "wait": return "\u23F1\uFE0F";
+      default: return "\u25B6\uFE0F";
     }
   };
 
   return (
-    <div style={{
-      background: "white",
-      borderRadius: "8px",
-      border: "1px solid #e2e8f0",
-      marginBottom: "8px",
-      overflow: "hidden",
-      boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-    }}>
+    <div className="sp-step-card">
       <div
-        style={{
-          padding: "10px 12px",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          background: expanded ? "#f0fdf4" : "white",
-        }}
+        className={`sp-step-header${expanded ? " sp-step-header--expanded" : ""}`}
         onClick={() => setExpanded(!expanded)}
       >
-        <span style={{
-          background: "#047857",
-          color: "white",
-          borderRadius: "50%",
-          width: "24px",
-          height: "24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "11px",
-          fontWeight: "bold",
-          flexShrink: 0,
-        }}>
-          {index + 1}
-        </span>
-        <span style={{ fontSize: "14px" }}>{actionIcon()}</span>
-        <span style={{ flex: 1, fontSize: "13px", fontWeight: 500, color: "#334155" }}>
-          {action.title}
-        </span>
-        <span style={{ fontSize: "11px", color: "#94a3b8" }}>
-          {expanded ? "▲" : "▼"}
-        </span>
+        <span className="sp-step-badge">{index + 1}</span>
+        <span className="sp-step-icon">{actionIcon()}</span>
+        <span className="sp-step-title">{action.title}</span>
+        <span className="sp-step-chevron">{expanded ? "\u25B2" : "\u25BC"}</span>
       </div>
 
       {expanded && (
-        <div style={{ padding: "0 12px 12px", borderTop: "1px solid #f1f5f9" }}>
-          <p style={{ fontSize: "12px", color: "#64748b", margin: "8px 0" }}>
-            {action.description}
-          </p>
-          <p style={{ fontSize: "11px", color: "#94a3b8", margin: "4px 0" }}>
-            URL: {action.page.url}
-          </p>
-          <p style={{ fontSize: "11px", color: "#94a3b8", margin: "4px 0" }}>
-            Time: {new Date(action.createdAt).toLocaleString()}
-          </p>
+        <div className="sp-step-body">
+          <p className="sp-step-desc">{action.description}</p>
+          <p className="sp-step-url">URL: {action.page.url}</p>
+          <p className="sp-step-time">Time: {new Date(action.createdAt).toLocaleString()}</p>
           {screenshot && (
             <img
               src={screenshot.dataUrl}
               alt={`Step ${index + 1}`}
-              style={{
-                width: "100%",
-                borderRadius: "6px",
-                marginTop: "8px",
-                border: "1px solid #e2e8f0",
-              }}
+              className="sp-step-img"
             />
           )}
           <button
+            className="sp-delete-btn"
             onClick={(e) => {
               e.stopPropagation();
               onDelete(action.id);
-            }}
-            style={{
-              marginTop: "8px",
-              padding: "4px 12px",
-              fontSize: "12px",
-              color: "#dc2626",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: "6px",
-              cursor: "pointer",
             }}
           >
             Delete Step
@@ -164,17 +113,16 @@ function App() {
     setStatus(`Generating ${format.toUpperCase()}...`);
 
     try {
-      if (format === "docx") {
-        const { generateDocx } = await import("../shared/exportDocx");
-        const blob = await generateDocx(bundle);
-        const url = URL.createObjectURL(blob);
-        const slug = bundle.session.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "q-pros-manual-guide";
-        chrome.downloads.download({ url, filename: `${slug}.docx`, saveAs: true });
+      const result = await send<{ success?: boolean; error?: string }>({
+        type: "export:create",
+        sessionId: bundle.session.id,
+        exportType: format
+      });
+      if (result.ok && result.data?.success) {
+        setStatus(`${format.toUpperCase()} exported successfully!`);
       } else {
-        const { generatePdf } = await import("../shared/exportPdf");
-        await generatePdf(bundle);
+        setStatus(`Error: ${result.data?.error || result.error || "Export failed"}`);
       }
-      setStatus(`${format.toUpperCase()} exported successfully!`);
     } catch (error) {
       setStatus(`Error: ${error instanceof Error ? error.message : "Export failed"}`);
     }
@@ -198,23 +146,21 @@ function App() {
   };
 
   return (
-    <div style={{ padding: "16px", maxWidth: "400px", margin: "0 auto" }}>
+    <div className="sp-root">
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: "20px", padding: "16px", background: "linear-gradient(135deg, #047857, #10b981)", borderRadius: "12px", color: "white" }}>
-        <h1 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "4px" }}>Q-PROS Manual Guide</h1>
-        <p style={{ fontSize: "12px", opacity: 0.9 }}>by Hussein Zahran</p>
+      <div className="sp-header">
+        <h1>Q-PROS Manual Guide</h1>
+        <p>by Hussein Zahran</p>
       </div>
 
       {/* Session Selector */}
       {!selectedSession && (
         <div>
-          <h2 style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px", color: "#334155" }}>
-            Select a Recording Session
-          </h2>
+          <h2 className="sp-section-title">Select a Recording Session</h2>
           {sessions.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 20px", color: "#94a3b8" }}>
-              <p style={{ fontSize: "14px" }}>No recordings yet</p>
-              <p style={{ fontSize: "12px", marginTop: "8px" }}>
+            <div className="sp-empty">
+              <p>No recordings yet</p>
+              <p>
                 Click the extension icon and start recording to create your first session
               </p>
             </div>
@@ -222,40 +168,16 @@ function App() {
             sessions.map((session) => (
               <div
                 key={session.id}
-                style={{
-                  padding: "12px",
-                  background: "white",
-                  borderRadius: "8px",
-                  border: "1px solid #e2e8f0",
-                  marginBottom: "8px",
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                }}
+                className="sp-session-card"
                 onClick={() => setSelectedSession(session.id)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#047857";
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(4,120,87,0.15)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#e2e8f0";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontWeight: 600, fontSize: "13px", color: "#1e293b" }}>
-                    {session.title}
-                  </span>
-                  <span style={{
-                    fontSize: "11px",
-                    padding: "2px 8px",
-                    borderRadius: "12px",
-                    background: session.status === "recording" ? "#dcfce7" : "#f1f5f9",
-                    color: session.status === "recording" ? "#16a34a" : "#64748b",
-                  }}>
+                <div className="sp-session-top">
+                  <span className="sp-session-title">{session.title}</span>
+                  <span className={`sp-badge ${session.status === "recording" ? "sp-badge--recording" : "sp-badge--idle"}`}>
                     {session.status}
                   </span>
                 </div>
-                <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                <p className="sp-session-meta">
                   {session.actionCount} steps · {new Date(session.updatedAt).toLocaleDateString()}
                 </p>
               </div>
@@ -269,99 +191,48 @@ function App() {
         <div>
           {/* Back button */}
           <button
+            className="sp-back"
             onClick={() => { setSelectedSession(null); setBundle(null); }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              fontSize: "12px",
-              color: "#047857",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              marginBottom: "12px",
-              padding: "4px 0",
-            }}
           >
             ← Back to sessions
           </button>
 
           {/* Session header */}
-          <div style={{
-            padding: "12px",
-            background: "white",
-            borderRadius: "8px",
-            border: "1px solid #e2e8f0",
-            marginBottom: "12px",
-          }}>
-            <h2 style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b", marginBottom: "4px" }}>
-              {bundle.session.title}
-            </h2>
-            <p style={{ fontSize: "11px", color: "#94a3b8" }}>
+          <div className="sp-detail-header">
+            <h2>{bundle.session.title}</h2>
+            <p>
               {bundle.actions.length} steps · Started {new Date(bundle.session.createdAt).toLocaleString()}
             </p>
           </div>
 
           {/* Export buttons */}
-          <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+          <div className="sp-export-row">
             <button
+              className="sp-export-btn sp-export-btn--docx"
               onClick={() => handleExport("docx")}
               disabled={exporting !== null}
-              style={{
-                flex: 1,
-                padding: "10px",
-                background: exporting === "docx" ? "#94a3b8" : "#047857",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                fontSize: "13px",
-                fontWeight: 600,
-                cursor: exporting !== null ? "not-allowed" : "pointer",
-                transition: "background 0.15s",
-              }}
             >
-              {exporting === "docx" ? "Generating..." : "📄 Export Word"}
+              {exporting === "docx" ? "Generating..." : "\u{1F4C4} Export Word"}
             </button>
             <button
+              className="sp-export-btn sp-export-btn--pdf"
               onClick={() => handleExport("pdf")}
               disabled={exporting !== null}
-              style={{
-                flex: 1,
-                padding: "10px",
-                background: exporting === "pdf" ? "#94a3b8" : "#dc2626",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                fontSize: "13px",
-                fontWeight: 600,
-                cursor: exporting !== null ? "not-allowed" : "pointer",
-                transition: "background 0.15s",
-              }}
             >
-              {exporting === "pdf" ? "Generating..." : "📕 Export PDF"}
+              {exporting === "pdf" ? "Generating..." : "\U0001F4D5 Export PDF"}
             </button>
           </div>
 
           {/* Status */}
           {status && (
-            <div style={{
-              padding: "8px 12px",
-              background: status.includes("Error") ? "#fef2f2" : "#f0fdf4",
-              color: status.includes("Error") ? "#dc2626" : "#047857",
-              borderRadius: "6px",
-              fontSize: "12px",
-              marginBottom: "12px",
-              border: `1px solid ${status.includes("Error") ? "#fecaca" : "#bbf7d0"}`,
-            }}>
+            <div className={`sp-status ${status.includes("Error") ? "sp-status--error" : "sp-status--success"}`}>
               {status}
             </div>
           )}
 
           {/* Steps list */}
           {loading ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
-              Loading steps...
-            </div>
+            <div className="sp-loading">Loading steps...</div>
           ) : (
             bundle.actions.map((action, index) => (
               <StepCard
@@ -376,18 +247,8 @@ function App() {
 
           {/* Delete session */}
           <button
+            className="sp-delete-session"
             onClick={() => handleDeleteSession(selectedSession)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              marginTop: "16px",
-              fontSize: "12px",
-              color: "#dc2626",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: "8px",
-              cursor: "pointer",
-            }}
           >
             Delete Session
           </button>

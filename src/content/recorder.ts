@@ -529,7 +529,7 @@ function createOverlay() {
              background:rgba(15,15,15,0.85); color:#fff; font:600 12px/1 system-ui,-apple-system,sans-serif;
              box-shadow:0 4px 12px rgba(0,0,0,0.25); white-space:nowrap;
              pointer-events:auto; cursor:move; user-select:none; touch-action:none; }
-      .dot { width:9px; height:9px; border-radius:50%; background:#ef4444; flex:none;
+      .dot { width:9px; height:9px; border-radius:50%; background:#E05A55; flex:none;
              animation: bar-pulse 1.2s ease-in-out infinite; }
       .dot.capturing { background:#f59e0b; }
       .dot.complete { background:#22c55e; animation:none; }

@@ -1,28 +1,28 @@
 /* =============================================================
-   Browser Agent Recorder — Design system v2.
+   Q-PROS Manual Guide — Design system v2.
    High-end software UI: neutral zinc canvas, off-black ink,
-   one restrained emerald accent. Geist + Geist Mono. Fluid CSS
-   motion (spring easing, tactile press, staggered reveals,
-   skeleton shimmer). No serif, no purple, no pure black.
+   coral red accent from the Q-PROS badge. Geist + Geist Mono.
+   Fluid CSS motion (spring easing, tactile press, staggered
+   reveals, skeleton shimmer). No serif, no purple, no pure black.
 ============================================================= */
 
 :root {
   /* Neutral base — warm-free zinc so the UI reads as a tool, not a brochure. */
-  --bg: #FAFAFA;
+  --bg: #F9FAFB;
   --bg-elevated: #F4F4F5;
   --bg-card: #FFFFFF;
 
   --fg: #0A0A0B;            /* off-black, never #000 */
   --fg-2: #27272A;
-  --muted: #71717A;
-  --muted-strong: #52525B;
+  --muted: #7C7C7C;
+  --muted-strong: #5A5A5A;
 
-  /* Single accent. Emerald, deep and desaturated — used sparingly. */
-  --accent: #047857;
-  --accent-2: #059669;
-  --accent-ink: #ECFDF5;
-  --accent-soft: rgba(4, 120, 87, 0.10);
-  --accent-tint: rgba(4, 120, 87, 0.05);
+  /* Single accent. Coral red from the Q-PROS badge — used sparingly. */
+  --accent: #E05A55;
+  --accent-2: #C94F4A;
+  --accent-ink: #FEF2F2;
+  --accent-soft: rgba(224, 90, 85, 0.10);
+  --accent-tint: rgba(224, 90, 85, 0.05);
 
   --danger: #B42318;
   --danger-soft: rgba(180, 35, 24, 0.08);
