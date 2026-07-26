@@ -561,6 +561,8 @@ function ExportMenu({ disabled, onExport }: { disabled: boolean; onExport: (type
           <button onClick={(event) => pick(event, "markdown")}>{t("editor.export.markdown")}</button>
           <button onClick={(event) => pick(event, "playwright")}>{t("editor.export.playwright")}</button>
           <button onClick={(event) => pick(event, "devtools")}>{t("editor.export.devtools")}</button>
+          <button onClick={(event) => pick(event, "docx")}>{t("editor.export.docx")}</button>
+          <button onClick={(event) => pick(event, "pdf")}>{t("editor.export.pdf")}</button>
         </div>
       ) : null}
     </details>

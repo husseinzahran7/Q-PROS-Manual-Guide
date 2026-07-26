@@ -14,6 +14,8 @@ import type {
 let recordingState: RecordingState = { status: "idle" };
 const inputTimers = new WeakMap<Element, number>();
 const earlyClickTargets = new WeakMap<Element, number>();
+const clickRecordedAt = new WeakMap<Element, number>();
+let lastClickTime = 0;
 let clientSequence = 0;
 let lastNavigationUrl = location.href;
 let composing = false;
@@ -190,7 +192,10 @@ function onPointerDown(event: PointerEvent) {
   if (event.button !== 0) return;
   const target = meaningfulTarget(event);
   if (!target || !shouldRecordClick(target) || !looksLikeInteractive(target)) return;
-  earlyClickTargets.set(target, Date.now());
+  const now = Date.now();
+  earlyClickTargets.set(target, now);
+  clickRecordedAt.set(target, now);
+  lastClickTime = now;
   void record(actionFromEvent("click", event));
 }
 
@@ -199,6 +204,9 @@ function onClick(event: MouseEvent) {
   if (!target || !shouldRecordClick(target)) return;
   const earlyClickAt = earlyClickTargets.get(target);
   if (earlyClickAt && Date.now() - earlyClickAt < 1500) return;
+  const now = Date.now();
+  clickRecordedAt.set(target, now);
+  lastClickTime = now;
   void record(actionFromEvent("click", event));
 }
 
@@ -223,10 +231,13 @@ function onInput(event: Event) {
 
   const target = meaningfulTarget(event);
   if (!target || !isInputtable(target)) return;
+  // Build the payload eagerly so the value is captured at event time, not
+  // 450ms later when the debounce fires (DOM may have changed by then).
+  const payload = buildAction({ type: "input", target, override: { composedInput: true } });
   const existing = inputTimers.get(target);
   if (existing) window.clearTimeout(existing);
   const timer = window.setTimeout(() => {
-    void record(actionFromEvent("input", event));
+    void record(payload);
   }, 450);
   inputTimers.set(target, timer);
 }
@@ -249,6 +260,11 @@ function onCompositionEnd(event: CompositionEvent) {
   inputTimers.set(target, timer);
 }
 
+function clickSupersedes(target: Element, windowMs = 600): boolean {
+  const t = clickRecordedAt.get(target);
+  return Boolean(t && Date.now() - t < windowMs);
+}
+
 function onChange(event: Event) {
   if (event.target instanceof HTMLInputElement && event.target.type === "file") {
     onFileChange(event);
@@ -256,6 +272,7 @@ function onChange(event: Event) {
   }
   const target = meaningfulTarget(event);
   if (!target || !isFormValueControl(target)) return;
+  if (clickSupersedes(target)) return;
   void record(actionFromEvent("change", event));
 }
 
@@ -268,14 +285,17 @@ function onSubmit(event: Event) {
       if (el instanceof Element && inputTimers.has(el)) flushInput(el);
     }
   }
+  // The click on the submit button already recorded this action; the submit
+  // event is just the DOM consequence.
+  if (Date.now() - lastClickTime < 500) return;
   void record(actionFromEvent("submit", event));
 }
 
 function onKeydown(event: KeyboardEvent) {
+  const target = meaningfulTarget(event);
   // Flush input debounce on commit-style keys so the value is recorded
   // before the key action (e.g., Enter that submits the field).
   if (["Enter", "Tab", "Escape"].includes(event.key)) {
-    const target = meaningfulTarget(event);
     if (target && inputTimers.has(target)) flushInput(target);
   }
 
@@ -285,6 +305,7 @@ function onKeydown(event: KeyboardEvent) {
     return;
   }
   if (["Enter", "Tab", "Escape"].includes(event.key)) {
+    if (target && clickSupersedes(target)) return;
     void record(actionFromEvent("keydown", event, event.key));
   }
 }
@@ -372,6 +393,9 @@ function recordDialog(detail: DialogInfo) {
 function recordNavigation() {
   if (location.href === lastNavigationUrl) return;
   lastNavigationUrl = location.href;
+  // Navigation caused by a recorded click is redundant — the click step
+  // already documents the user's intent to navigate.
+  if (Date.now() - lastClickTime < 2000) return;
   void refreshState().then(() =>
     record({
       clientEventId: `evt_${Date.now()}_${++clientSequence}`,

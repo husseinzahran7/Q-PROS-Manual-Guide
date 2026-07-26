@@ -1,8 +1,8 @@
-# Privacy Policy — Browser Agent Recorder
+# Privacy Policy — Q-PROS Manual Guide
 
-_Last updated: 2026-06-09_
+_Last updated: 2026-07-23_
 
-Browser Agent Recorder ("the extension") is a local-first browser recorder. This
+Q-PROS Manual Guide ("the extension") is a local-first browser recorder. This
 policy explains exactly what data it touches and where that data goes.
 
 ## Summary
@@ -64,4 +64,4 @@ that request. No other network requests are made.
 ## Contact
 
 Questions or requests: open an issue at
-<https://github.com/VelvetAbyss/browser-agent-recorder/issues>.
+<https://github.com/husseinzahran7/Q-PROS-Manual-Guide/issues>.

@@ -7,11 +7,11 @@ below. Items marked **TODO** still need you (account, screenshots).
 
 - [ ] Register a Chrome Web Store **developer account** (one-time **$5** fee) and verify your email.
 - [ ] Enable **2-Step Verification** on that Google account (required to publish).
-- [ ] Build the upload zip: `npm run package` → `web-ext-artifacts/browser-agent-recorder-<version>.zip`.
+- [ ] Build the upload zip: `npm run package` → `web-ext-artifacts/q-pros-manual-guide-<version>.zip`.
 
 ## Listing fields
 
-**Name:** Browser Agent Recorder
+**Name:** Q-PROS Manual Guide
 
 **Short description** (≤132 chars):
 > Record any browser workflow and export it as a step-by-step SOP or an AI-agent Skill Pack. Local-first — nothing leaves your device.
@@ -24,7 +24,7 @@ below. Items marked **TODO** still need you (account, screenshots).
 ```
 Record a browser task once. Replay it forever.
 
-Browser Agent Recorder captures what you do in the browser — clicks, typing,
+Q-PROS Manual Guide captures what you do in the browser — clicks, typing,
 navigations, dropdowns, file uploads, and dialogs — with a screenshot of every
 step that highlights exactly what you clicked. Then it turns that recording into
 documentation a human or an AI agent can follow.
@@ -58,10 +58,9 @@ PRIVATE BY DESIGN
 Press Alt+Shift+R to start or stop recording anywhere.
 ```
 
-**Homepage URL:** https://github.com/VelvetAbyss/browser-agent-recorder
+**Homepage URL:** https://github.com/husseinzahran7/Q-PROS-Manual-Guide
 
-**Privacy policy URL:** https://velvetabyss.github.io/browser-agent-recorder/privacy.html
-_(falls back to https://github.com/VelvetAbyss/browser-agent-recorder/blob/main/PRIVACY.md if Pages is not enabled)_
+**Privacy policy URL:** https://github.com/husseinzahran7/Q-PROS-Manual-Guide/blob/main/PRIVACY.md
 
 ## Graphic assets
 

@@ -61,6 +61,8 @@ const dict = {
   "editor.export.markdown": { en: "SOP · Markdown", zh: "SOP · Markdown" },
   "editor.export.playwright": { en: "Playwright test", zh: "Playwright 测试" },
   "editor.export.devtools": { en: "DevTools Recorder", zh: "DevTools Recorder" },
+  "editor.export.docx": { en: "Word document", zh: "Word 文档" },
+  "editor.export.pdf": { en: "PDF document", zh: "PDF 文档" },
   "editor.recordings": { en: "Recordings", zh: "录制记录" },
   "editor.sessionMeta": { en: "{n} steps", zh: "{n} 步" },
   "editor.storage": { en: "{n} recordings · {usage}", zh: "{n} 条记录 · {usage}" },
