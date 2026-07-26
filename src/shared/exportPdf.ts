@@ -88,15 +88,18 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
     doc.setTextColor(51, 51, 51);
     const desc = actionDescription(action);
     const descLines = doc.splitTextToSize(desc, contentWidth);
-    doc.text(descLines, margin, yPosition);
-    yPosition += descLines.length * 14 + 8;
+    descLines.forEach((line: string) => {
+      doc.text(line, pageWidth / 2, yPosition, { align: "center" });
+      yPosition += 14;
+    });
+    yPosition += 8;
 
     // URL and time
     doc.setFontSize(9);
     doc.setTextColor(102, 102, 102);
-    doc.text(`URL: ${action.page.url}`, margin, yPosition);
+    doc.text(`URL: ${action.page.url}`, pageWidth / 2, yPosition, { align: "center" });
     yPosition += 12;
-    doc.text(`Time: ${new Date(action.createdAt).toLocaleString()}`, margin, yPosition);
+    doc.text(`Time: ${new Date(action.createdAt).toLocaleString()}`, pageWidth / 2, yPosition, { align: "center" });
     yPosition += 16;
 
     // Screenshot
@@ -111,12 +114,13 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
           yPosition = margin;
         }
 
-        doc.addImage(screenshot.dataUrl, "JPEG", margin, yPosition, imgWidth, imgHeight);
+        const imgX = (pageWidth - imgWidth) / 2;
+        doc.addImage(screenshot.dataUrl, "JPEG", imgX, yPosition, imgWidth, imgHeight);
         yPosition += imgHeight + 20;
       } catch {
         doc.setFontSize(10);
         doc.setTextColor(153, 153, 153);
-        doc.text("[Screenshot could not be embedded]", margin, yPosition);
+        doc.text("[Screenshot could not be embedded]", pageWidth / 2, yPosition, { align: "center" });
         yPosition += 20;
       }
     }
