@@ -12,7 +12,7 @@ import type {
 } from "../shared/types";
 
 let recordingState: RecordingState = { status: "idle" };
-const inputTimers = new WeakMap<Element, number>();
+const inputTimers = new Map<Element, number>();
 const earlyClickTargets = new WeakMap<Element, number>();
 const clickRecordedAt = new WeakMap<Element, number>();
 let lastClickTime = 0;
@@ -236,9 +236,11 @@ function onInput(event: Event) {
   const payload = buildAction({ type: "input", target, override: { composedInput: true } });
   const existing = inputTimers.get(target);
   if (existing) window.clearTimeout(existing);
+  // Long debounce — input steps are only flushed on blur/Enter/Tab/navigation,
+  // not during natural typing pauses. This keeps "we go to the gym" as one step.
   const timer = window.setTimeout(() => {
     void record(payload);
-  }, 450);
+  }, 5000);
   inputTimers.set(target, timer);
 }
 
@@ -255,7 +257,7 @@ function onCompositionEnd(event: CompositionEvent) {
   const existing = inputTimers.get(target);
   if (existing) window.clearTimeout(existing);
   const timer = window.setTimeout(() => {
-    void record(buildAction({ type: "input", target }));
+    void record(buildAction({ type: "input", target, override: { composedInput: true } }));
   }, 80);
   inputTimers.set(target, timer);
 }
@@ -393,6 +395,15 @@ function recordDialog(detail: DialogInfo) {
 function recordNavigation() {
   if (location.href === lastNavigationUrl) return;
   lastNavigationUrl = location.href;
+  // Flush any pending input debounces before recording navigation
+  const pendingTargets: Element[] = [];
+  inputTimers.forEach((_timer, target) => pendingTargets.push(target));
+  for (const target of pendingTargets) {
+    const timer = inputTimers.get(target);
+    if (timer) window.clearTimeout(timer);
+    inputTimers.delete(target);
+    void record(buildAction({ type: "input", target, override: { composedInput: true } }));
+  }
   // Navigation caused by a recorded click is redundant — the click step
   // already documents the user's intent to navigate.
   if (Date.now() - lastClickTime < 2000) return;

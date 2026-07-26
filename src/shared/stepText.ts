@@ -4,9 +4,17 @@ function targetName(action: Pick<RecordedAction | ActionPayload, "target">) {
   return action.target.ariaLabel || action.target.placeholder || action.target.text || action.target.name || action.target.id || action.target.selector;
 }
 
+function inputValue(action: Pick<RecordedAction | ActionPayload, "value" | "valuePolicy">): string | undefined {
+  if (action.value && action.valuePolicy !== "runtime" && action.valuePolicy !== "masked") return action.value;
+  return undefined;
+}
+
 export function generatedTitle(action: ActionPayload, stepNumber: number) {
   const target = targetName(action);
-  if (action.type === "input") return `Enter value in ${target}`;
+  if (action.type === "input") {
+    const val = inputValue(action);
+    return val ? `Enter "${val}" in ${target}` : `Enter value in ${target}`;
+  }
   if (action.type === "change") {
     const label = action.valueLabel ? ` to ${action.valueLabel}` : "";
     return `Change ${target}${label}`;
@@ -36,7 +44,10 @@ export function generatedTitle(action: ActionPayload, stepNumber: number) {
 
 export function generatedDescription(action: ActionPayload) {
   const target = targetName(action);
-  if (action.type === "input") return `Type the required value into ${target}.`;
+  if (action.type === "input") {
+    const val = inputValue(action);
+    return val ? `Type "${val}" into ${target}.` : `Type the required value into ${target}.`;
+  }
   if (action.type === "change") {
     const label = action.valueLabel ? ` (${action.valueLabel})` : "";
     return `Set ${target}${label} to the recorded state.`;
