@@ -37,31 +37,28 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
   const contentWidth = pageWidth - 2 * margin;
   let yPosition = margin;
 
-  // Title page
+  // Title page — vertically centered
+  const centerY = pageHeight / 2 - 50;
+
   doc.setFontSize(32);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(26, 26, 46);
-  doc.text("Q-PROS Manual Guide", pageWidth / 2, yPosition + 20, { align: "center" });
-  yPosition += 50;
+  doc.text("Q-PROS Manual Guide", pageWidth / 2, centerY, { align: "center" });
 
   doc.setFontSize(20);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(22, 33, 62);
-  doc.text(bundle.session.title, pageWidth / 2, yPosition, { align: "center" });
-  yPosition += 30;
+  doc.text(bundle.session.title, pageWidth / 2, centerY + 35, { align: "center" });
 
   doc.setFontSize(12);
   doc.setTextColor(102, 102, 102);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: "center" });
-  yPosition += 20;
-  doc.text(`URL: ${bundle.session.startUrl || "N/A"}`, pageWidth / 2, yPosition, { align: "center" });
-  yPosition += 40;
+  doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, centerY + 65, { align: "center" });
+  doc.text(`URL: ${bundle.session.startUrl || "N/A"}`, pageWidth / 2, centerY + 82, { align: "center" });
 
   // Separator line
   doc.setDrawColor(224, 90, 85);
   doc.setLineWidth(2);
-  doc.line(margin, yPosition, pageWidth - margin, yPosition);
-  yPosition += 30;
+  doc.line(margin, centerY + 105, pageWidth - margin, centerY + 105);
 
   // Start steps on a new page
   doc.addPage();
@@ -82,7 +79,7 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(224, 90, 85);
-    doc.text(`Step ${step}: ${action.title}`, margin, yPosition);
+    doc.text(`Step ${step}: ${action.title}`, pageWidth / 2, yPosition, { align: "center" });
     yPosition += 22;
 
     // Action description
