@@ -63,6 +63,10 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
   doc.line(margin, yPosition, pageWidth - margin, yPosition);
   yPosition += 30;
 
+  // Start steps on a new page
+  doc.addPage();
+  yPosition = margin;
+
   // Steps
   bundle.actions.forEach((action, index) => {
     const step = index + 1;
