@@ -30,7 +30,7 @@ type Entry = { en: string; zh: string };
 
 const dict = {
   // Popup
-  "popup.kicker": { en: "Browser Agent · Recorder", zh: "浏览器智能体 · 录制器" },
+  "popup.kicker": { en: "Q-PROS · Manual Guide", zh: "Q-PROS · 操作指南" },
   "popup.title.a": { en: "Record it.", zh: "录下来。" },
   "popup.title.b": { en: "Replay it.", zh: "随时重放。" },
   "popup.status.ready": { en: "Ready when you are.", zh: "随时可以开始。" },
@@ -54,7 +54,7 @@ const dict = {
   "onboard.s3": { en: "Open the guide library here to edit steps and export an SOP or Skill Pack.", zh: "在这里打开指南库，编辑步骤并导出 SOP 或 Skill Pack。" },
   "onboard.dismiss": { en: "Got it", zh: "知道了" },
   // Editor shell
-  "editor.kicker": { en: "Browser Agent · Library", zh: "浏览器智能体 · 指南库" },
+  "editor.kicker": { en: "Q-PROS · Guide Library", zh: "Q-PROS · 指南库" },
   "editor.title": { en: "Guide library.", zh: "指南库。" },
   "editor.exportPack": { en: "Export Skill Pack", zh: "导出 Skill Pack" },
   "editor.moreFormats": { en: "More formats", zh: "更多格式" },

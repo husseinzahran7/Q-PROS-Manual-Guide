@@ -94,6 +94,8 @@ Press Alt+Shift+R to start or stop recording anywhere.
   only to observe native alert/confirm/prompt dialogs) into the recorded page.
 - **`storage`:** Persist recordings locally (IndexedDB) and remember UI
   preferences such as the overlay position.
+- **`sidePanel`:** Display the step editor and guide library in the browser side panel.
+- **`downloads`:** Save exported Word (.docx) and PDF files to the user's chosen location.
 - **Remote code:** None. All scripts are bundled in the package. Web fonts
   (CSS/woff2) are loaded from Google Fonts for UI styling only.
 

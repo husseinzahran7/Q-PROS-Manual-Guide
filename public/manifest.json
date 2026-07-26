@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Q-PROS Manual Guide",
-  "description": "Record browser interactions and export manual test guides as Word/PDF documents.",
+  "description": "Record browser workflows and export them as Word, PDF, Markdown, Playwright tests, or AI Skill Packs. Fully local.",
   "version": "1.0.0",
   "icons": {
     "16": "icons/icon-16.png",

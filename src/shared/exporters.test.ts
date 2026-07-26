@@ -211,7 +211,7 @@ describe("exporters", () => {
     expect(zip.file("workflow-memory.md")).toBeTruthy();
     expect(zip.file("screenshots/step-001.jpg")).toBeTruthy();
     const manifest = await zip.file("manifest.yaml")!.async("string");
-    expect(manifest).toContain("browser-agent-recorder.skill-pack.v2");
+    expect(manifest).toContain("q-pros-manual-guide.skill-pack.v2");
     expect(manifest).toContain("start_url: \"https://example.com/login\"");
     expect(manifest).toContain("start_context_file: start-context.json");
     expect(manifest).toContain("write_back_policy: additive_only");

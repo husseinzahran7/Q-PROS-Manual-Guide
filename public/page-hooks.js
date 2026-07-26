@@ -1,5 +1,5 @@
 /*
-  Browser Agent Recorder — page-world hooks.
+  Q-PROS Manual Guide — page-world hooks.
 
   Runs in the MAIN world (page JS scope) when registered via
   chrome.scripting.registerContentScripts. Patches the native dialog
@@ -12,14 +12,14 @@
 */
 
 (function () {
-  if (window.__browserAgentRecorderHooked) return;
-  Object.defineProperty(window, "__browserAgentRecorderHooked", {
+  if (window.__qprosManualGuideHooked) return;
+  Object.defineProperty(window, "__qprosManualGuideHooked", {
     value: true,
     writable: false,
     configurable: false
   });
 
-  var EVENT_NAME = "__browser_agent_recorder_event__";
+  var EVENT_NAME = "__qpros_manual_guide_event__";
 
   function emit(detail) {
     try {

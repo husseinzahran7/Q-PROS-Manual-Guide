@@ -129,7 +129,7 @@ async function startRecording(message: Extract<AppMessage, { type: "recording:st
   // Force-inject the content script before flipping the state to recording.
   // Manifest content_scripts only fire on future page loads, so a tab that
   // was already open at install/update time would otherwise be a no-op and
-  // the user would see 0 captured steps. Guarded by __browserAgentRecorderInstalled
+  // the user would see 0 captured steps. Guarded by __qprosManualGuideInstalled
   // so re-injection on an already-instrumented tab is a no-op.
   const inject = await ensureContentScript(tab.id);
   if (!inject.ok) {

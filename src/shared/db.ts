@@ -8,7 +8,7 @@ export class RecorderDatabase extends Dexie {
   exports!: Table<ExportRecord, string>;
 
   constructor() {
-    super("browser-agent-recorder");
+    super("q-pros-manual-guide");
     this.version(1).stores({
       sessions: "id, status, createdAt, updatedAt",
       actions: "id, sessionId, stepNumber, createdAt, deleted",

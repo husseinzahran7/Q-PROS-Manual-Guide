@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import type { RecordedAction, ScreenshotRecord, SessionBundle } from "./types";
 import { runtimeVariableName } from "./sanitize";
 
-const SKILL_PACK_FORMAT = "browser-agent-recorder.skill-pack.v2";
+const SKILL_PACK_FORMAT = "q-pros-manual-guide.skill-pack.v2";
 
 function screenshotPath(stepNumber: number) {
   return `screenshots/step-${String(stepNumber).padStart(3, "0")}.jpg`;
@@ -447,7 +447,7 @@ export function generateWorkflowMemory(bundle: SessionBundle) {
 export function generateLearningNotesSchema() {
   return JSON.stringify(
     {
-      schema: "browser-agent-recorder.learning-note.v1",
+      schema: "q-pros-manual-guide.learning-note.v1",
       append_only: true,
       required_fields: [
         "timestamp",

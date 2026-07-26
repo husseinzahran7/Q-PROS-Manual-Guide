@@ -444,7 +444,7 @@ function patchHistory() {
 }
 
 const isTopFrame = window.top === window;
-const OVERLAY_ATTR = "data-browser-agent-recorder";
+const OVERLAY_ATTR = "data-q-pros-manual-guide";
 let overlayRoot: HTMLDivElement | null = null;
 let overlayBar: HTMLElement | null = null;
 let overlayCount: HTMLSpanElement | null = null;
@@ -652,11 +652,11 @@ if (isTopFrame) {
 // tab that was loaded before the extension was installed/updated. Without a
 // guard we'd attach every listener twice and emit each user event twice.
 interface RecorderWindow extends Window {
-  __browserAgentRecorderInstalled?: boolean;
+  __qprosManualGuideInstalled?: boolean;
 }
 const installFlag = window as RecorderWindow;
-if (!installFlag.__browserAgentRecorderInstalled) {
-  installFlag.__browserAgentRecorderInstalled = true;
+if (!installFlag.__qprosManualGuideInstalled) {
+  installFlag.__qprosManualGuideInstalled = true;
 
   // Restore the user's preferred overlay position (O), then re-apply in case
   // the overlay was already created before this resolved.
@@ -691,7 +691,7 @@ if (!installFlag.__browserAgentRecorderInstalled) {
   });
 
   // MAIN-world hooks dispatch a CustomEvent we can pick up here.
-  window.addEventListener("__browser_agent_recorder_event__", (event: Event) => {
+  window.addEventListener("__qpros_manual_guide_event__", (event: Event) => {
     const detail = (event as CustomEvent).detail;
     if (!detail || typeof detail !== "object") return;
     if (detail.type === "dialog") {
