@@ -741,6 +741,7 @@ async function handleMessage(message: AppMessage, sender: chrome.runtime.Message
     if (message.type === "export:create") return ok(await createExport(message));
     return fail("Unknown message");
   } catch (error) {
+    console.error("[Q-PROS] handleMessage error:", error);
     return fail(error);
   }
 }

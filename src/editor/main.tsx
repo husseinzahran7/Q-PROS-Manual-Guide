@@ -19,6 +19,25 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
+function resizeDataUrl(dataUrl: string, maxDim = 1280): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width <= maxDim && height <= maxDim) { resolve(dataUrl); return; }
+      if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+      else { width = Math.round(width * maxDim / height); height = maxDim; }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 type ExportResponse = {
   record: { filename: string };
   content?: string;
@@ -51,6 +70,19 @@ function blobFromBase64(base64: string, type: string) {
   return new Blob([bytes], { type });
 }
 
+function Toast({ message, kind, onDone }: { message: string; kind: "error" | "success"; onDone: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDone, kind === "error" ? 6000 : 3000);
+    return () => clearTimeout(timer);
+  }, [kind, onDone]);
+  return (
+    <div className={`toast toast--${kind}`}>
+      <span>{message}</span>
+      <button className="toastClose" onClick={onDone}><X size={14} /></button>
+    </div>
+  );
+}
+
 function Editor() {
   const initialSession = new URLSearchParams(location.search).get("session") || undefined;
   const [sessions, setSessions] = useState<RecordingSession[]>([]);
@@ -64,10 +96,16 @@ function Editor() {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [deleted, setDeleted] = useState<RecordedAction[]>([]);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [toast, setToast] = useState<{ message: string; kind: "error" | "success" } | null>(null);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualTitle, setManualTitle] = useState("");
   const [manualDesc, setManualDesc] = useState("");
   const [manualScreenshot, setManualScreenshot] = useState<string | null>(null);
+
+  function showError(msg: string) {
+    setError(msg);
+    setToast({ message: msg, kind: "error" });
+  }
 
   async function loadStorage() {
     const response = await sendMessage<StorageEstimate>({ type: "storage:estimate" });
@@ -89,7 +127,7 @@ function Editor() {
     setError("");
     const response = await sendMessage<SessionBundle>({ type: "session:get", sessionId });
     if (isOk(response)) setBundle(response.data);
-    else setError(response.error);
+    else showError(response.error);
     const del = await sendMessage<RecordedAction[]>({ type: "session:deleted-steps", sessionId });
     if (isOk(del)) setDeleted(del.data);
     setLoading(false);
@@ -98,7 +136,7 @@ function Editor() {
   async function restoreStep(actionId: string) {
     const response = await sendMessage({ type: "session:restore-step", actionId });
     if (!response.ok) {
-      setError(response.error);
+      showError(response.error);
       return;
     }
     if (bundle) await loadBundle(bundle.session.id);
@@ -108,26 +146,33 @@ function Editor() {
     if (!bundle) return;
     const response = await sendMessage<SessionBundle>({ type: "session:insert-step", sessionId: bundle.session.id, kind, value: kind === "wait" ? "2" : "" });
     if (isOk(response)) setBundle(response.data);
-    else setError(response.error);
+    else showError(response.error);
   }
 
   async function insertManualStep() {
     if (!bundle || !manualTitle.trim()) return;
-    const response = await sendMessage<SessionBundle>({
-      type: "session:insert-manual-step",
-      sessionId: bundle.session.id,
-      title: manualTitle.trim(),
-      description: manualDesc.trim(),
-      screenshotDataUrl: manualScreenshot ?? undefined
-    });
-    if (isOk(response)) {
-      setBundle(response.data);
-      setManualTitle("");
-      setManualDesc("");
-      setManualScreenshot(null);
-      setShowManualForm(false);
-    } else {
-      setError(response.error);
+    try {
+      const resized = manualScreenshot ? await resizeDataUrl(manualScreenshot) : undefined;
+      const response = await sendMessage<SessionBundle>({
+        type: "session:insert-manual-step",
+        sessionId: bundle.session.id,
+        title: manualTitle.trim(),
+        description: manualDesc.trim(),
+        screenshotDataUrl: resized
+      });
+      if (isOk(response)) {
+        setBundle(response.data);
+        setManualTitle("");
+        setManualDesc("");
+        setManualScreenshot(null);
+        setShowManualForm(false);
+        setToast({ message: "Manual step added", kind: "success" });
+      } else {
+        showError(response.error);
+      }
+    } catch (err) {
+      console.error("[Q-PROS] insertManualStep error:", err);
+      showError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -152,7 +197,7 @@ function Editor() {
     if (!bundle) return;
     const response = await sendMessage({ type: "session:update-meta", sessionId: bundle.session.id, patch });
     if (!response.ok) {
-      setError(response.error);
+      showError(response.error);
       return;
     }
     setBundle({ ...bundle, session: { ...bundle.session, ...patch } });
@@ -161,13 +206,13 @@ function Editor() {
 
   async function patchStep(action: RecordedAction, patch: Partial<RecordedAction>) {
     const response = await sendMessage<RecordedAction>({ type: "session:update-step", actionId: action.id, patch });
-    if (!response.ok) setError(response.error);
+    if (!response.ok) showError(response.error);
     if (bundle) await loadBundle(bundle.session.id);
   }
 
   async function deleteStep(action: RecordedAction) {
     const response = await sendMessage({ type: "session:delete-step", actionId: action.id });
-    if (!response.ok) setError(response.error);
+    if (!response.ok) showError(response.error);
     if (bundle) await loadBundle(bundle.session.id);
   }
 
@@ -175,7 +220,7 @@ function Editor() {
     if (!bundle) return;
     const response = await sendMessage<SessionBundle>({ type: "session:reorder-steps", sessionId: bundle.session.id, actionIds: ids });
     if (isOk(response)) setBundle(response.data);
-    else setError(response.error);
+    else showError(response.error);
   }
 
   async function moveStep(index: number, direction: -1 | 1) {
@@ -204,7 +249,7 @@ function Editor() {
     if (!confirm(t("editor.confirmClearAll"))) return;
     const response = await sendMessage({ type: "storage:clear" });
     if (!response.ok) {
-      setError(response.error);
+      showError(response.error);
       return;
     }
     setSelectedId(undefined);
@@ -217,7 +262,7 @@ function Editor() {
     if (!confirm(t("editor.confirmDeleteSession"))) return;
     const response = await sendMessage({ type: "session:delete", sessionId });
     if (!response.ok) {
-      setError(response.error);
+      showError(response.error);
       return;
     }
     if (selectedId === sessionId) {
@@ -232,7 +277,7 @@ function Editor() {
     if (!bundle) return;
     const response = await sendMessage<ExportResponse>({ type: "export:create", sessionId: bundle.session.id, exportType });
     if (!response.ok) {
-      setError(response.error);
+      showError(response.error);
       return;
     }
     if (response.data.content !== undefined) {
@@ -290,6 +335,7 @@ function Editor() {
         </aside>
         <section className="content">
           {error ? <p className="errorBanner">{error}</p> : null}
+          {toast ? <Toast message={toast.message} kind={toast.kind} onDone={() => setToast(null)} /> : null}
           {loading && !bundle ? (
             <SkeletonSteps />
           ) : !bundle ? (
