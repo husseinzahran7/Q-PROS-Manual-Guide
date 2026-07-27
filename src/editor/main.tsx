@@ -392,48 +392,6 @@ function Editor() {
                 <button onClick={() => void insertStep("wait")}><Clock size={14} /> {t("insert.wait")}</button>
                 <span className="insertHint muted">{t("insert.hint")}</span>
               </div>
-              {showManualForm && (
-                <div className="manualStepForm">
-                  <h3>{insertAfterId ? "Insert step here" : "Add manual step"}</h3>
-                  <p className="muted" style={{ margin: "0 0 10px", fontSize: 12 }}>
-                    Add a step with your own screenshot (e.g. from Postman, desktop app, database, etc.)
-                  </p>
-                  <label className="manualField">
-                    <span>Title *</span>
-                    <input
-                      value={manualTitle}
-                      onChange={(event) => setManualTitle(event.target.value)}
-                      placeholder="e.g. Verify API response in Postman"
-                    />
-                  </label>
-                  <label className="manualField">
-                    <span>Description</span>
-                    <textarea
-                      value={manualDesc}
-                      onChange={(event) => setManualDesc(event.target.value)}
-                      placeholder="Describe what this step covers..."
-                    />
-                  </label>
-                  <label className="manualField">
-                    <span>Screenshot (optional)</span>
-                    <input type="file" accept="image/*" onChange={handleManualScreenshot} />
-                  </label>
-                  {manualScreenshot && (
-                    <div className="manualPreview">
-                      <img src={manualScreenshot} alt="Preview" />
-                      <button className="danger small" onClick={() => setManualScreenshot(null)}><Trash2 size={12} /> Remove</button>
-                    </div>
-                  )}
-                  <div className="manualActions">
-                    <button className="primary" disabled={!manualTitle.trim()} onClick={() => void insertManualStep()}>
-                      <Plus size={14} /> Add Step
-                    </button>
-                    <button onClick={() => { setShowManualForm(false); setInsertAfterId(null); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
               {deleted.length ? (
                 <div className="deletedSection">
                   <button className="deletedToggle" onClick={() => setShowDeleted((value) => !value)}>
@@ -456,11 +414,55 @@ function Editor() {
         </section>
       </section>
       {lightbox ? (
-        <div className="lightbox" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
+        <div className="lightboxOverlay" onClick={() => setLightbox(null)}>
           <img src={lightbox.src} alt={lightbox.alt} />
           <button className="lightboxClose" aria-label={t("lightbox.close")} onClick={() => setLightbox(null)}><X size={20} /></button>
         </div>
       ) : null}
+      {showManualForm && (
+        <div className="modalOverlay" onClick={() => { setShowManualForm(false); setInsertAfterId(null); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
+          <div className="modalContent" onClick={(e) => e.stopPropagation()}>
+            <h3>{insertAfterId ? "Insert step here" : "Add manual step"}</h3>
+            <p className="muted" style={{ margin: "0 0 12px", fontSize: 12 }}>
+              Add a step with your own screenshot (e.g. from Postman, desktop app, database, etc.)
+            </p>
+            <label className="manualField">
+              <span>Title *</span>
+              <input
+                value={manualTitle}
+                onChange={(event) => setManualTitle(event.target.value)}
+                placeholder="e.g. Verify API response in Postman"
+              />
+            </label>
+            <label className="manualField">
+              <span>Description</span>
+              <textarea
+                value={manualDesc}
+                onChange={(event) => setManualDesc(event.target.value)}
+                placeholder="Describe what this step covers..."
+              />
+            </label>
+            <label className="manualField">
+              <span>Screenshot (optional)</span>
+              <input type="file" accept="image/*" onChange={handleManualScreenshot} />
+            </label>
+            {manualScreenshot && (
+              <div className="manualPreview">
+                <img src={manualScreenshot} alt="Preview" />
+                <button className="danger small" onClick={() => setManualScreenshot(null)}><Trash2 size={12} /> Remove</button>
+              </div>
+            )}
+            <div className="manualActions">
+              <button className="primary" disabled={!manualTitle.trim()} onClick={() => void insertManualStep()}>
+                <Plus size={14} /> Add Step
+              </button>
+              <button onClick={() => { setShowManualForm(false); setInsertAfterId(null); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

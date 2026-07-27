@@ -995,7 +995,68 @@ textarea {
 .manualActions {
   display: flex;
   gap: 8px;
+}
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
   align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
+}
+.modalContent {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+}
+.modalContent h3 {
+  margin: 0 0 4px;
+}
+.modalContent .manualActions {
+  margin-top: 16px;
+}
+.modalContent .manualField {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+.modalContent .manualField span {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.modalContent .manualField input,
+.modalContent .manualField textarea {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+.modalContent .manualField textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+.modalContent .manualPreview {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.modalContent .manualPreview img {
+  max-width: 200px;
+  max-height: 120px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
 }
 .manualActions button {
   display: inline-flex;
