@@ -98,7 +98,7 @@
 
 /* ---------- Back button ---------- */
 .sp-back {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 12px;
@@ -145,6 +145,10 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s var(--spring);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 .sp-export-btn:disabled {
   background: var(--muted) !important;
@@ -271,6 +275,9 @@
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.12s var(--spring);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .sp-delete-btn:hover {
   background: #fee2e2;
@@ -288,7 +295,20 @@
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.12s var(--spring);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 .sp-delete-session:hover {
   background: #fee2e2;
+}
+
+/* ---------- Spin animation ---------- */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 1s linear infinite;
 }

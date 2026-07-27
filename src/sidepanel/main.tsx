@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
+import { ArrowLeft, FileText, FileDown, ChevronDown, ChevronUp, Trash2, Loader2 } from "lucide-react";
 import type { RecordingSession, RecordedAction, ScreenshotRecord, SessionBundle } from "../shared/types";
 import "./styles.css";
 
@@ -43,7 +44,7 @@ function StepCard({
         <span className="sp-step-badge">{index + 1}</span>
         <span className="sp-step-icon">{actionIcon()}</span>
         <span className="sp-step-title">{action.title}</span>
-        <span className="sp-step-chevron">{expanded ? "\u25B2" : "\u25BC"}</span>
+        <span className="sp-step-chevron">{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
       </div>
 
       {expanded && (
@@ -65,7 +66,7 @@ function StepCard({
               onDelete(action.id);
             }}
           >
-            Delete Step
+            <Trash2 size={12} /> Delete Step
           </button>
         </div>
       )}
@@ -194,7 +195,7 @@ function App() {
             className="sp-back"
             onClick={() => { setSelectedSession(null); setBundle(null); }}
           >
-            ← Back to sessions
+            <ArrowLeft size={14} /> Back to sessions
           </button>
 
           {/* Session header */}
@@ -212,14 +213,14 @@ function App() {
               onClick={() => handleExport("docx")}
               disabled={exporting !== null}
             >
-              {exporting === "docx" ? "Generating..." : "\u{1F4C4} Export Word"}
+              {exporting === "docx" ? <><Loader2 size={14} className="spin" /> Generating...</> : <><FileText size={14} /> Export Word</>}
             </button>
             <button
               className="sp-export-btn sp-export-btn--pdf"
               onClick={() => handleExport("pdf")}
               disabled={exporting !== null}
             >
-              {exporting === "pdf" ? "Generating..." : "\U0001F4D5 Export PDF"}
+              {exporting === "pdf" ? <><Loader2 size={14} className="spin" /> Generating...</> : <><FileDown size={14} /> Export PDF</>}
             </button>
           </div>
 
@@ -250,7 +251,7 @@ function App() {
             className="sp-delete-session"
             onClick={() => handleDeleteSession(selectedSession)}
           >
-            Delete Session
+            <Trash2 size={14} /> Delete Session
           </button>
         </div>
       )}

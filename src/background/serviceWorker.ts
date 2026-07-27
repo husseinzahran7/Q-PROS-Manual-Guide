@@ -4,7 +4,7 @@ import { generateDevtoolsRecorderJson, generateHumanGuide, generatePlaywright, g
 import { generateDocx } from "../shared/exportDocx";
 import { generatePdf } from "../shared/exportPdf";
 import { generatedDescription, generatedTitle } from "../shared/stepText";
-import type { ActionPayload, AppMessage, AppResponse, ExportType, RecordedAction, RecordingSession, RecordingState, StorageEstimate } from "../shared/types";
+import type { ActionPayload, AppMessage, AppResponse, ExportType, RecordedAction, RecordingSession, RecordingState, ScreenshotRecord, StorageEstimate } from "../shared/types";
 
 const STATE_KEY = "recordingState";
 const SCREENSHOT_MIN_INTERVAL_MS = 600;
@@ -526,6 +526,56 @@ async function insertStep(message: Extract<AppMessage, { type: "session:insert-s
   return getSessionBundle(message.sessionId);
 }
 
+async function insertManualStep(message: Extract<AppMessage, { type: "session:insert-manual-step" }>) {
+  const session = await db.sessions.get(message.sessionId);
+  if (!session) throw new Error("Session not found");
+  const live = (await db.actions.where("sessionId").equals(message.sessionId).toArray()).filter((a) => !a.deleted);
+  const stepNumber = live.length + 1;
+  const last = await db.actions.where("sessionId").equals(message.sessionId).sortBy("stepNumber");
+  const page = last[last.length - 1]?.page ?? {
+    url: session.startUrl ?? "",
+    domain: session.startUrl ? new URL(session.startUrl).hostname : "",
+    title: session.title
+  };
+  const action: RecordedAction = {
+    id: id("action"),
+    sessionId: message.sessionId,
+    stepNumber,
+    type: "note",
+    page,
+    target: {
+      tagName: "document",
+      selector: "html",
+      xpath: "/html",
+      selectorConfidence: 1,
+      candidates: [{ kind: "css", value: "html", confidence: 1 }]
+    },
+    value: message.description,
+    valuePolicy: "none",
+    sensitive: false,
+    highRisk: false,
+    title: message.title || "Manual step",
+    description: message.description || "Manually added step.",
+    createdAt: now(),
+    manual: true
+  };
+  await db.actions.add(action);
+  if (message.screenshotDataUrl) {
+    const screenshot: ScreenshotRecord = {
+      id: id("screenshot"),
+      sessionId: message.sessionId,
+      actionId: action.id,
+      stepNumber,
+      dataUrl: message.screenshotDataUrl,
+      path: "",
+      createdAt: now()
+    };
+    await db.screenshots.add(screenshot);
+  }
+  await db.sessions.update(message.sessionId, { actionCount: stepNumber, updatedAt: now() });
+  return getSessionBundle(message.sessionId);
+}
+
 async function reorderSteps(sessionId: string, actionIds: string[]) {
   await db.transaction("rw", db.actions, db.sessions, async () => {
     for (let index = 0; index < actionIds.length; index += 1) {
@@ -683,6 +733,7 @@ async function handleMessage(message: AppMessage, sender: chrome.runtime.Message
     if (message.type === "session:restore-step") return ok(await restoreStep(message.actionId));
     if (message.type === "session:deleted-steps") return ok(await deletedSteps(message.sessionId));
     if (message.type === "session:insert-step") return ok(await insertStep(message));
+    if (message.type === "session:insert-manual-step") return ok(await insertManualStep(message));
     if (message.type === "session:reorder-steps") return ok(await reorderSteps(message.sessionId, message.actionIds));
     if (message.type === "session:delete") return ok(await deleteSession(message.sessionId));
     if (message.type === "storage:estimate") return ok(await storageEstimate());

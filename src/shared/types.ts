@@ -190,6 +190,7 @@ export type AppMessage =
   | { type: "session:restore-step"; actionId: string }
   | { type: "session:deleted-steps"; sessionId: string }
   | { type: "session:insert-step"; sessionId: string; kind: "note" | "wait"; value?: string }
+  | { type: "session:insert-manual-step"; sessionId: string; title: string; description: string; screenshotDataUrl?: string }
   | { type: "session:reorder-steps"; sessionId: string; actionIds: string[] }
   | { type: "session:delete"; sessionId: string }
   | { type: "storage:estimate" }

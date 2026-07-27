@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { Circle, Pause, Play, Square, FileText, FolderOpen } from "lucide-react";
 import "../styles.css";
 import { isOk, sendMessage } from "../shared/messages";
 import { t } from "../shared/i18n";
@@ -101,16 +102,20 @@ function Popup() {
       <div className="buttonStack">
         {isRecording ? (
           <>
-            <button onClick={togglePause}>{isPaused ? t("popup.resume") : t("popup.pause")}</button>
-            <button onClick={stop}>{t("popup.stop")}</button>
+            <button onClick={togglePause}>
+              {isPaused ? <><Play size={14} /> {t("popup.resume")}</> : <><Pause size={14} /> {t("popup.pause")}</>}
+            </button>
+            <button onClick={stop}><Square size={14} /> {t("popup.stop")}</button>
           </>
         ) : (
-          <button className="primary" onClick={start}>{t("popup.start")}</button>
+          <button className="primary" onClick={start}><Circle size={14} /> {t("popup.start")}</button>
         )}
         <button disabled={!lastSession} onClick={() => openEditor(lastSession?.id)}>
-          {t("popup.openLast")}
+          <FileText size={14} /> {t("popup.openLast")}
         </button>
-        <button onClick={() => openEditor()}>{t("popup.openLibrary")}</button>
+        <button onClick={() => openEditor()}>
+          <FolderOpen size={14} /> {t("popup.openLibrary")}
+        </button>
       </div>
 
       {isRecording && stepCount === 0 ? <p className="muted hint">{t("popup.hint")}</p> : null}

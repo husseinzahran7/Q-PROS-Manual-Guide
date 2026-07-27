@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type DragEvent, type MouseEvent } from "react";
 import { createRoot } from "react-dom/client";
+import { FileDown, FileText, Plus, Clock, StickyNote, ArrowUp, ArrowDown, Trash2, X, ImagePlus } from "lucide-react";
 import "../styles.css";
 import { isOk, sendMessage } from "../shared/messages";
 import { runtimeVariableName } from "../shared/sanitize";
@@ -63,6 +64,10 @@ function Editor() {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [deleted, setDeleted] = useState<RecordedAction[]>([]);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualDesc, setManualDesc] = useState("");
+  const [manualScreenshot, setManualScreenshot] = useState<string | null>(null);
 
   async function loadStorage() {
     const response = await sendMessage<StorageEstimate>({ type: "storage:estimate" });
@@ -104,6 +109,34 @@ function Editor() {
     const response = await sendMessage<SessionBundle>({ type: "session:insert-step", sessionId: bundle.session.id, kind, value: kind === "wait" ? "2" : "" });
     if (isOk(response)) setBundle(response.data);
     else setError(response.error);
+  }
+
+  async function insertManualStep() {
+    if (!bundle || !manualTitle.trim()) return;
+    const response = await sendMessage<SessionBundle>({
+      type: "session:insert-manual-step",
+      sessionId: bundle.session.id,
+      title: manualTitle.trim(),
+      description: manualDesc.trim(),
+      screenshotDataUrl: manualScreenshot ?? undefined
+    });
+    if (isOk(response)) {
+      setBundle(response.data);
+      setManualTitle("");
+      setManualDesc("");
+      setManualScreenshot(null);
+      setShowManualForm(false);
+    } else {
+      setError(response.error);
+    }
+  }
+
+  function handleManualScreenshot(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setManualScreenshot(reader.result as string);
+    reader.readAsDataURL(file);
   }
 
   useEffect(() => {
@@ -217,8 +250,9 @@ function Editor() {
           <h1>{bundle ? bundle.session.title : t("editor.title")}</h1>
         </div>
         <div className="topbarActions">
-          <button disabled={!bundle} onClick={() => void exportBundle("docx")}>{t("editor.export.docx")}</button>
-          <button disabled={!bundle} onClick={() => void exportBundle("pdf")}>{t("editor.export.pdf")}</button>
+          <button disabled={!bundle} onClick={() => { setShowManualForm(!showManualForm); }}><ImagePlus size={14} /> {t("editor.addManual")}</button>
+          <button disabled={!bundle} onClick={() => void exportBundle("docx")}><FileText size={14} /> {t("editor.export.docx")}</button>
+          <button disabled={!bundle} onClick={() => void exportBundle("pdf")}><FileDown size={14} /> {t("editor.export.pdf")}</button>
         </div>
       </header>
       <section className="layout">
@@ -236,7 +270,7 @@ function Editor() {
                     </span>
                   </button>
                   <button className="danger small" title={t("editor.deleteRecording")} onClick={() => void deleteSessionAt(session.id)}>
-                    ×
+                    <Trash2 size={12} />
                   </button>
                 </div>
               );
@@ -249,7 +283,7 @@ function Editor() {
                 {storage.quotaBytes ? ` / ${formatBytes(storage.quotaBytes)}` : ""}
               </span>
               {storage.sessionCount > 0 ? (
-                <button className="danger small" onClick={() => void clearAll()}>{t("editor.clearAll")}</button>
+                <button className="danger small" onClick={() => void clearAll()}><Trash2 size={12} /> {t("editor.clearAll")}</button>
               ) : null}
             </div>
           ) : null}
@@ -293,10 +327,52 @@ function Editor() {
               )}
               <div className="insertBar">
                 <span className="insertLabel">{t("insert.title")}</span>
-                <button onClick={() => void insertStep("note")}>{t("insert.note")}</button>
-                <button onClick={() => void insertStep("wait")}>{t("insert.wait")}</button>
+                <button onClick={() => void insertStep("note")}><StickyNote size={14} /> {t("insert.note")}</button>
+                <button onClick={() => void insertStep("wait")}><Clock size={14} /> {t("insert.wait")}</button>
                 <span className="insertHint muted">{t("insert.hint")}</span>
               </div>
+              {showManualForm && (
+                <div className="manualStepForm">
+                  <h3>Add Manual Step</h3>
+                  <p className="muted" style={{ margin: "0 0 10px", fontSize: 12 }}>
+                    Add a step with your own screenshot (e.g. from Postman, desktop app, database, etc.)
+                  </p>
+                  <label className="manualField">
+                    <span>Title *</span>
+                    <input
+                      value={manualTitle}
+                      onChange={(event) => setManualTitle(event.target.value)}
+                      placeholder="e.g. Verify API response in Postman"
+                    />
+                  </label>
+                  <label className="manualField">
+                    <span>Description</span>
+                    <textarea
+                      value={manualDesc}
+                      onChange={(event) => setManualDesc(event.target.value)}
+                      placeholder="Describe what this step covers..."
+                    />
+                  </label>
+                  <label className="manualField">
+                    <span>Screenshot (optional)</span>
+                    <input type="file" accept="image/*" onChange={handleManualScreenshot} />
+                  </label>
+                  {manualScreenshot && (
+                    <div className="manualPreview">
+                      <img src={manualScreenshot} alt="Preview" />
+                      <button className="danger small" onClick={() => setManualScreenshot(null)}><Trash2 size={12} /> Remove</button>
+                    </div>
+                  )}
+                  <div className="manualActions">
+                    <button className="primary" disabled={!manualTitle.trim()} onClick={() => void insertManualStep()}>
+                      <Plus size={14} /> Add Step
+                    </button>
+                    <button onClick={() => { setShowManualForm(false); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
               {deleted.length ? (
                 <div className="deletedSection">
                   <button className="deletedToggle" onClick={() => setShowDeleted((value) => !value)}>
@@ -321,7 +397,7 @@ function Editor() {
       {lightbox ? (
         <div className="lightbox" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
           <img src={lightbox.src} alt={lightbox.alt} />
-          <button className="lightboxClose" aria-label={t("lightbox.close")} onClick={() => setLightbox(null)}>×</button>
+          <button className="lightboxClose" aria-label={t("lightbox.close")} onClick={() => setLightbox(null)}><X size={20} /></button>
         </div>
       ) : null}
     </main>
@@ -384,9 +460,9 @@ function StepCard({
 
   const actions = (
     <div className="stepActions">
-      <button disabled={index === 0} onClick={() => onMove(-1)}>{t("step.moveUp")}</button>
-      <button disabled={index === total - 1} onClick={() => onMove(1)}>{t("step.moveDown")}</button>
-      <button className="danger" onClick={onDelete}>{t("step.delete")}</button>
+      <button disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={14} /> {t("step.moveUp")}</button>
+      <button disabled={index === total - 1} onClick={() => onMove(1)}><ArrowDown size={14} /> {t("step.moveDown")}</button>
+      <button className="danger" onClick={onDelete}><Trash2 size={14} /> {t("step.delete")}</button>
     </div>
   );
 

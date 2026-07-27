@@ -347,7 +347,10 @@ textarea {
 
 .buttonStack button {
   width: 100%;
-  justify-content: space-between;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .buttonStack button.primary {
@@ -438,6 +441,11 @@ textarea {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
+}
+.topbarActions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .layout {
@@ -776,6 +784,11 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
 }
+.stepActions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 .flags label {
   display: inline-flex;
@@ -867,6 +880,11 @@ textarea {
   border-radius: var(--radius-card);
   background: var(--bg);
 }
+.insertBar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 .insertLabel {
   font-family: var(--font-mono);
@@ -884,6 +902,69 @@ textarea {
 
 .insertHint {
   font-size: 11.5px;
+}
+
+/* ---------- Manual step form ---------- */
+.manualStepForm {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-card);
+}
+.manualStepForm h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.manualField {
+  display: block;
+  margin-bottom: 10px;
+}
+.manualField span {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-strong);
+  margin-bottom: 4px;
+}
+.manualField input,
+.manualField textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--fg);
+  box-sizing: border-box;
+}
+.manualField textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+.manualPreview {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.manualPreview img {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  object-fit: cover;
+}
+.manualActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.manualActions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .step.manual {
