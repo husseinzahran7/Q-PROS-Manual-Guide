@@ -1347,7 +1347,6 @@ textarea {
 }
 .lightboxNav:hover {
   background: #fff;
-  transform: translateY(-50%) scale(1.08);
 }
 .lightboxPrev { left: 16px; }
 .lightboxNext { right: 16px; }
@@ -1717,4 +1716,31 @@ textarea {
   .content {
     padding: 22px 20px 48px;
   }
+}
+
+/* ── Author credit ─────────────────────────────────────── */
+
+/* Popup: tiny footer line */
+.popupCredit {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+}
+
+/* Editor topbar: small inline tag beside h1 */
+.topbarCredit {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 4px;
+  opacity: 0.65;
+  white-space: nowrap;
+  align-self: flex-end;
+  padding-bottom: 2px;
+  letter-spacing: 0.01em;
 }

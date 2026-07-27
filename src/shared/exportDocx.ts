@@ -111,6 +111,20 @@ export async function generateDocx(bundle: SessionBundle): Promise<Blob> {
     })
   );
 
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Created by Hussein Zahran",
+          size: 16,
+          color: "aaaaaa",
+          italics: true,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    })
+  );
+
   children.push(new Paragraph({ text: "" }));
 
   // Steps

@@ -57,10 +57,16 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
   doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, centerY + 65, { align: "center" });
   doc.text(`URL: ${bundle.session.startUrl || "N/A"}`, pageWidth / 2, centerY + 82, { align: "center" });
 
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(170, 170, 170);
+  doc.text("Created by Hussein Zahran", pageWidth / 2, centerY + 100, { align: "center" });
+
   // Separator line
+  doc.setFont("helvetica", "normal");
   doc.setDrawColor(224, 90, 85);
   doc.setLineWidth(2);
-  doc.line(margin, centerY + 105, pageWidth - margin, centerY + 105);
+  doc.line(margin, centerY + 115, pageWidth - margin, centerY + 115);
 
   // Start steps on a new page
   doc.addPage();

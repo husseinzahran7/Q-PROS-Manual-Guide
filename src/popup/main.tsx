@@ -121,6 +121,8 @@ function Popup() {
       {isRecording && stepCount === 0 ? <p className="muted hint">{t("popup.hint")}</p> : null}
 
       {error ? <p className="errorBanner">{error}</p> : null}
+
+      <footer className="popupCredit">Created by Hussein Zahran</footer>
     </main>
   );
 }
