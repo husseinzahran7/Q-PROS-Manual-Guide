@@ -114,7 +114,6 @@ function Popup() {
       </div>
 
       {isRecording && stepCount === 0 ? <p className="muted hint">{t("popup.hint")}</p> : null}
-      {!isRecording ? <p className="muted shortcutHint">{t("popup.shortcut")}</p> : null}
 
       {error ? <p className="errorBanner">{error}</p> : null}
     </main>

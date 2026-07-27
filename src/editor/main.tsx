@@ -217,8 +217,8 @@ function Editor() {
           <h1>{bundle ? bundle.session.title : t("editor.title")}</h1>
         </div>
         <div className="topbarActions">
-          <ExportMenu disabled={!bundle} onExport={(type) => void exportBundle(type)} />
-          <button className="primary" disabled={!bundle} onClick={() => void exportBundle("skill-pack")}>{t("editor.exportPack")}</button>
+          <button disabled={!bundle} onClick={() => void exportBundle("docx")}>{t("editor.export.docx")}</button>
+          <button disabled={!bundle} onClick={() => void exportBundle("pdf")}>{t("editor.export.pdf")}</button>
         </div>
       </header>
       <section className="layout">
@@ -542,29 +542,6 @@ function LocatorEditor({ action, onPatch }: { action: RecordedAction; onPatch: (
           </div>
         ) : null}
       </div>
-    </details>
-  );
-}
-
-function ExportMenu({ disabled, onExport }: { disabled: boolean; onExport: (type: ExportType) => void }) {
-  function pick(event: MouseEvent<HTMLButtonElement>, type: ExportType) {
-    (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-    onExport(type);
-  }
-  return (
-    <details className="exportMenu">
-      <summary aria-disabled={disabled} className={disabled ? "isDisabled" : ""}>
-        {t("editor.moreFormats")}
-      </summary>
-      {!disabled ? (
-        <div className="exportMenuList">
-          <button onClick={(event) => pick(event, "markdown")}>{t("editor.export.markdown")}</button>
-          <button onClick={(event) => pick(event, "playwright")}>{t("editor.export.playwright")}</button>
-          <button onClick={(event) => pick(event, "devtools")}>{t("editor.export.devtools")}</button>
-          <button onClick={(event) => pick(event, "docx")}>{t("editor.export.docx")}</button>
-          <button onClick={(event) => pick(event, "pdf")}>{t("editor.export.pdf")}</button>
-        </div>
-      ) : null}
     </details>
   );
 }
