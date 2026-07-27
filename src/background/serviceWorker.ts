@@ -530,13 +530,31 @@ async function insertManualStep(message: Extract<AppMessage, { type: "session:in
   const session = await db.sessions.get(message.sessionId);
   if (!session) throw new Error("Session not found");
   const live = (await db.actions.where("sessionId").equals(message.sessionId).toArray()).filter((a) => !a.deleted);
-  const stepNumber = live.length + 1;
-  const last = await db.actions.where("sessionId").equals(message.sessionId).sortBy("stepNumber");
-  const page = last[last.length - 1]?.page ?? {
-    url: session.startUrl ?? "",
-    domain: session.startUrl ? new URL(session.startUrl).hostname : "",
-    title: session.title
-  };
+  const sorted = live.sort((a, b) => a.stepNumber - b.stepNumber);
+
+  let stepNumber: number;
+  let afterPage: RecordedAction["page"];
+
+  if (message.insertAfterActionId) {
+    const afterIndex = sorted.findIndex((a) => a.id === message.insertAfterActionId);
+    if (afterIndex === -1) throw new Error("Referenced step not found");
+    stepNumber = sorted[afterIndex].stepNumber + 1;
+    afterPage = sorted[afterIndex].page;
+    // Shift all subsequent steps down by 1
+    for (let i = afterIndex + 1; i < sorted.length; i += 1) {
+      await db.actions.update(sorted[i].id, { stepNumber: sorted[i].stepNumber + 1 });
+    }
+  } else {
+    stepNumber = live.length + 1;
+    const last = sorted[sorted.length - 1];
+    afterPage = last?.page ?? {
+      url: session.startUrl ?? "",
+      domain: session.startUrl ? new URL(session.startUrl).hostname : "",
+      title: session.title
+    };
+  }
+
+  const page = afterPage!;
   const action: RecordedAction = {
     id: id("action"),
     sessionId: message.sessionId,
@@ -572,7 +590,7 @@ async function insertManualStep(message: Extract<AppMessage, { type: "session:in
     };
     await db.screenshots.add(screenshot);
   }
-  await db.sessions.update(message.sessionId, { actionCount: stepNumber, updatedAt: now() });
+  await db.sessions.update(message.sessionId, { actionCount: live.length + 1, updatedAt: now() });
   return getSessionBundle(message.sessionId);
 }
 

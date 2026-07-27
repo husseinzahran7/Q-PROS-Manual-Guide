@@ -101,6 +101,7 @@ function Editor() {
   const [manualTitle, setManualTitle] = useState("");
   const [manualDesc, setManualDesc] = useState("");
   const [manualScreenshot, setManualScreenshot] = useState<string | null>(null);
+  const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
 
   function showError(msg: string) {
     setError(msg);
@@ -158,7 +159,8 @@ function Editor() {
         sessionId: bundle.session.id,
         title: manualTitle.trim(),
         description: manualDesc.trim(),
-        screenshotDataUrl: resized
+        screenshotDataUrl: resized,
+        insertAfterActionId: insertAfterId ?? undefined
       });
       if (isOk(response)) {
         setBundle(response.data);
@@ -166,6 +168,7 @@ function Editor() {
         setManualDesc("");
         setManualScreenshot(null);
         setShowManualForm(false);
+        setInsertAfterId(null);
         setToast({ message: "Manual step added", kind: "success" });
       } else {
         showError(response.error);
@@ -182,6 +185,14 @@ function Editor() {
     const reader = new FileReader();
     reader.onload = () => setManualScreenshot(reader.result as string);
     reader.readAsDataURL(file);
+  }
+
+  function openManualFormAfter(actionId: string | null) {
+    setInsertAfterId(actionId);
+    setShowManualForm(true);
+    setManualTitle("");
+    setManualDesc("");
+    setManualScreenshot(null);
   }
 
   useEffect(() => {
@@ -295,7 +306,7 @@ function Editor() {
           <h1>{bundle ? bundle.session.title : t("editor.title")}</h1>
         </div>
         <div className="topbarActions">
-          <button disabled={!bundle} onClick={() => { setShowManualForm(!showManualForm); }}><ImagePlus size={14} /> {t("editor.addManual")}</button>
+          <button disabled={!bundle} onClick={() => openManualFormAfter(null)}><ImagePlus size={14} /> {t("editor.addManual")}</button>
           <button disabled={!bundle} onClick={() => void exportBundle("docx")}><FileText size={14} /> {t("editor.export.docx")}</button>
           <button disabled={!bundle} onClick={() => void exportBundle("pdf")}><FileDown size={14} /> {t("editor.export.pdf")}</button>
         </div>
@@ -348,26 +359,30 @@ function Editor() {
               ) : (
                 <div className="steps">
                   {bundle.actions.map((action, index) => (
-                    <StepCard
-                      key={action.id}
-                      action={action}
-                      index={index}
-                      screenshot={screenshots.get(action.id)}
-                      total={bundle.actions.length}
-                      dragging={dragIndex === index}
-                      isDropTarget={overIndex === index && dragIndex !== null && dragIndex !== index}
-                      onPatch={(patch) => void patchStep(action, patch)}
-                      onDelete={() => void deleteStep(action)}
-                      onMove={(direction) => void moveStep(index, direction)}
-                      onDragStart={() => setDragIndex(index)}
-                      onDragEnter={() => setOverIndex(index)}
-                      onDragEnd={() => {
-                        setDragIndex(null);
-                        setOverIndex(null);
-                      }}
-                      onDrop={() => void dropStep(index)}
-                      onZoom={(src, alt) => setLightbox({ src, alt })}
-                    />
+                    <div key={action.id} className="stepSlot">
+                      <StepCard
+                        action={action}
+                        index={index}
+                        screenshot={screenshots.get(action.id)}
+                        total={bundle.actions.length}
+                        dragging={dragIndex === index}
+                        isDropTarget={overIndex === index && dragIndex !== null && dragIndex !== index}
+                        onPatch={(patch) => void patchStep(action, patch)}
+                        onDelete={() => void deleteStep(action)}
+                        onMove={(direction) => void moveStep(index, direction)}
+                        onDragStart={() => setDragIndex(index)}
+                        onDragEnter={() => setOverIndex(index)}
+                        onDragEnd={() => {
+                          setDragIndex(null);
+                          setOverIndex(null);
+                        }}
+                        onDrop={() => void dropStep(index)}
+                        onZoom={(src, alt) => setLightbox({ src, alt })}
+                      />
+                      <button className="insertBetween" onClick={() => openManualFormAfter(action.id)}>
+                        <Plus size={12} /> Add step here
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -379,7 +394,7 @@ function Editor() {
               </div>
               {showManualForm && (
                 <div className="manualStepForm">
-                  <h3>Add Manual Step</h3>
+                  <h3>{insertAfterId ? "Insert step here" : "Add manual step"}</h3>
                   <p className="muted" style={{ margin: "0 0 10px", fontSize: 12 }}>
                     Add a step with your own screenshot (e.g. from Postman, desktop app, database, etc.)
                   </p>
@@ -413,7 +428,7 @@ function Editor() {
                     <button className="primary" disabled={!manualTitle.trim()} onClick={() => void insertManualStep()}>
                       <Plus size={14} /> Add Step
                     </button>
-                    <button onClick={() => { setShowManualForm(false); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
+                    <button onClick={() => { setShowManualForm(false); setInsertAfterId(null); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
                       Cancel
                     </button>
                   </div>
@@ -532,7 +547,7 @@ function StepCard({
         {dragHandle}
         <div className="manualChip">{action.type === "wait" ? t("step.wait") : t("step.note")}</div>
         <div className="stepFields">
-          <div className="muted">{t("step.label", { n: index + 1, type: action.type })}</div>
+        <div className="muted">{t("step.label", { n: index + 1, type: manual ? "manual" : action.type })}</div>
           {action.type === "wait" ? (
             <label className="waitField">
               <span>{t("step.waitSeconds")}</span>

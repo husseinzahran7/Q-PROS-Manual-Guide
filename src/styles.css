@@ -790,6 +790,42 @@ textarea {
   gap: 4px;
 }
 
+/* ---------- Insert between steps ---------- */
+.stepSlot {
+  position: relative;
+}
+.insertBetween {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  border: 1px dashed transparent;
+  border-radius: var(--radius-input);
+  background: none;
+  color: var(--muted-strong);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s var(--spring);
+  margin: 0;
+}
+.stepSlot:hover .insertBetween {
+  height: 28px;
+  opacity: 1;
+  margin: 4px 0;
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+.insertBetween:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
 .flags label {
   display: inline-flex;
   align-items: center;
