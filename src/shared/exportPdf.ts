@@ -6,6 +6,8 @@ function byActionId(screenshots: ScreenshotRecord[]) {
 }
 
 function actionDescription(action: RecordedAction): string {
+  if (action.type === "note") return action.title || "Manual step";
+  if (action.type === "wait") return action.title || `Wait ${action.value || "2"}s`;
   if (action.type === "click") {
     return `Click on "${action.target.ariaLabel || action.target.text || action.target.selector}"`;
   }

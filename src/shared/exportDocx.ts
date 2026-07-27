@@ -20,7 +20,11 @@ function actionDescription(action: RecordedAction, index: number): string {
   const parts: string[] = [];
   parts.push(`Step ${step}: ${action.title}`);
 
-  if (action.type === "click") {
+  if (action.type === "note") {
+    if (action.description) parts.push(`Description: ${action.description}`);
+  } else if (action.type === "wait") {
+    parts.push(`Action: Wait ${action.value || "2"} seconds`);
+  } else if (action.type === "click") {
     parts.push(`Action: Click on "${action.target.ariaLabel || action.target.text || action.target.selector}"`);
   } else if (action.type === "input") {
     parts.push(`Action: Type in "${action.target.ariaLabel || action.target.placeholder || action.target.selector}"`);

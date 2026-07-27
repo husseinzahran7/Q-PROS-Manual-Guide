@@ -500,7 +500,7 @@ function StepCard({
   const confidence = Math.round(action.target.selectorConfidence * 100);
   const alt = `Step ${index + 1}: ${action.title}`;
   const manual = action.type === "note" || action.type === "wait";
-  const className = `step${manual ? " manual" : ""}${dragging ? " dragging" : ""}${isDropTarget ? " dropTarget" : ""}`;
+  const className = `step${dragging ? " dragging" : ""}${isDropTarget ? " dropTarget" : ""}`;
 
   const dragHandle = (
     <button
@@ -587,7 +587,6 @@ function StepCard({
         )}
       </div>
       <div className="stepFields">
-        {manual ? <div className="manualChip">{t("step.note")}</div> : null}
         <div className="muted">{t("step.label", { n: index + 1, type: action.type })}</div>
         <input value={action.title} onChange={(event) => onPatch({ title: event.target.value })} />
         <textarea value={action.description} onChange={(event) => onPatch({ description: event.target.value })} />
