@@ -72,7 +72,7 @@ function blobFromBase64(base64: string, type: string) {
 
 function Toast({ message, kind, onDone }: { message: string; kind: "error" | "success"; onDone: () => void }) {
   useEffect(() => {
-    const timer = setTimeout(onDone, kind === "error" ? 6000 : 3000);
+    const timer = setTimeout(onDone, kind === "error" ? 6000 : 5000);
     return () => clearTimeout(timer);
   }, [kind, onDone]);
   return (
@@ -524,8 +524,9 @@ function StepCard({
     }
   };
 
-  // Manual note / wait steps (N) — no DOM target, screenshot, flags, or locator.
-  if (manual) {
+  // Manual note / wait steps with no screenshot get the simplified view.
+  // Manual steps WITH a screenshot render as full steps (like recorded ones).
+  if (manual && !screenshot) {
     return (
       <article className={className} style={{ "--index": index } as CSSProperties} {...dragProps}>
         {dragHandle}
@@ -571,6 +572,7 @@ function StepCard({
         )}
       </div>
       <div className="stepFields">
+        {manual ? <div className="manualChip">{t("step.note")}</div> : null}
         <div className="muted">{t("step.label", { n: index + 1, type: action.type })}</div>
         <input value={action.title} onChange={(event) => onPatch({ title: event.target.value })} />
         <textarea value={action.description} onChange={(event) => onPatch({ description: event.target.value })} />
