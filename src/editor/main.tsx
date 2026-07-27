@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type DragEvent, type MouseEvent } from "react";
 import { createRoot } from "react-dom/client";
-import { FileDown, FileText, Plus, Clock, StickyNote, ArrowUp, ArrowDown, Trash2, X, ImagePlus } from "lucide-react";
+import { FileDown, FileText, Plus, Clock, StickyNote, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Trash2, X, ImagePlus } from "lucide-react";
 import "../styles.css";
 import { isOk, sendMessage } from "../shared/messages";
 import { runtimeVariableName } from "../shared/sanitize";
@@ -430,13 +430,13 @@ function Editor() {
             <div className="lightbox" onClick={(e) => e.stopPropagation()}>
               {prev ? (
                 <button className="lightboxNav lightboxPrev" onClick={() => setLightbox(prev.idx)} title="Previous screenshot">
-                  <ArrowUp size={24} style={{ transform: "rotate(-90deg)" }} />
+                  <ArrowLeft size={24} />
                 </button>
               ) : null}
               <img src={screenshot.dataUrl} alt={alt} />
               {next ? (
                 <button className="lightboxNav lightboxNext" onClick={() => setLightbox(next.idx)} title="Next screenshot">
-                  <ArrowDown size={24} style={{ transform: "rotate(-90deg)" }} />
+                  <ArrowRight size={24} />
                 </button>
               ) : null}
               <button className="lightboxClose" aria-label={t("lightbox.close")} onClick={() => setLightbox(null)}><X size={20} /></button>
