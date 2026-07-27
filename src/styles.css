@@ -999,26 +999,27 @@ textarea {
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0,0,0,0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 .modalContent {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: #fff;
+  border: 2px solid var(--text);
   border-radius: 12px;
   padding: 24px;
   width: 420px;
   max-width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.35);
 }
 .modalContent h3 {
   margin: 0 0 4px;
+  color: var(--text);
 }
 .modalContent .manualActions {
   margin-top: 16px;
@@ -1032,6 +1033,7 @@ textarea {
   font-weight: 600;
   font-size: 13px;
   margin-bottom: 4px;
+  color: var(--text);
 }
 .modalContent .manualField input,
 .modalContent .manualField textarea {
@@ -1039,7 +1041,7 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 14px;
-  background: var(--bg);
+  background: #fff;
   color: var(--text);
 }
 .modalContent .manualField textarea {
@@ -1293,16 +1295,12 @@ textarea {
   border-color: var(--border-strong);
 }
 
-.lightbox {
+.lightboxOverlay {
   position: fixed;
   inset: 0;
   z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 4vh 4vw;
   background: rgba(9, 9, 11, 0.78);
   backdrop-filter: blur(6px);
-  cursor: zoom-out;
   animation: fade-in 0.2s var(--spring);
 }
 
@@ -1311,13 +1309,48 @@ textarea {
   to { opacity: 1; }
 }
 
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 51;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4vh 60px;
+}
+
 .lightbox img {
-  max-width: 100%;
+  max-width: calc(100% - 120px);
   max-height: 92vh;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.6);
 }
+
+.lightboxNav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid var(--border);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: background 0.15s, transform 0.15s;
+  z-index: 52;
+}
+.lightboxNav:hover {
+  background: #fff;
+  transform: translateY(-50%) scale(1.08);
+}
+.lightboxPrev { left: 16px; }
+.lightboxNext { right: 16px; }
 
 .lightboxClose {
   position: fixed;
@@ -1332,6 +1365,20 @@ textarea {
   border-radius: 50%;
   background: var(--bg-card);
   color: var(--fg);
+}
+
+.lightboxCounter {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 52;
 }
 
 /* ---------- Locator editor ---------- */

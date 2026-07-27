@@ -93,7 +93,7 @@ function Editor() {
   const [storage, setStorage] = useState<StorageEstimate | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [lightbox, setLightbox] = useState<number | null>(null);
   const [deleted, setDeleted] = useState<RecordedAction[]>([]);
   const [showDeleted, setShowDeleted] = useState(false);
   const [toast, setToast] = useState<{ message: string; kind: "error" | "success" } | null>(null);
@@ -377,7 +377,7 @@ function Editor() {
                           setOverIndex(null);
                         }}
                         onDrop={() => void dropStep(index)}
-                        onZoom={(src, alt) => setLightbox({ src, alt })}
+                        onZoom={() => setLightbox(index)}
                       />
                       <button className="insertBetween" onClick={() => openManualFormAfter(action.id)}>
                         <Plus size={12} /> Add step here
@@ -413,12 +413,37 @@ function Editor() {
           )}
         </section>
       </section>
-      {lightbox ? (
-        <div className="lightboxOverlay" onClick={() => setLightbox(null)}>
-          <img src={lightbox.src} alt={lightbox.alt} />
-          <button className="lightboxClose" aria-label={t("lightbox.close")} onClick={() => setLightbox(null)}><X size={20} /></button>
-        </div>
-      ) : null}
+      {lightbox !== null && bundle ? (() => {
+        const stepsWithScreenshots = bundle.actions
+          .map((a, i) => ({ action: a, idx: i }))
+          .filter(({ action }) => screenshots.get(action.id));
+        const currentEntry = stepsWithScreenshots.find(e => e.idx === lightbox);
+        const currentPos = stepsWithScreenshots.findIndex(e => e.idx === lightbox);
+        if (!currentEntry) return null;
+        const screenshot = screenshots.get(currentEntry.action.id)!;
+        const alt = currentEntry.action.title || `Step ${currentEntry.idx + 1}`;
+        const prev = currentPos > 0 ? stepsWithScreenshots[currentPos - 1] : null;
+        const next = currentPos < stepsWithScreenshots.length - 1 ? stepsWithScreenshots[currentPos + 1] : null;
+        return (
+          <div className="lightboxOverlay" onClick={() => setLightbox(null)}>
+            <div className="lightbox" onClick={(e) => e.stopPropagation()}>
+              {prev ? (
+                <button className="lightboxNav lightboxPrev" onClick={() => setLightbox(prev.idx)} title="Previous screenshot">
+                  <ArrowUp size={24} style={{ transform: "rotate(-90deg)" }} />
+                </button>
+              ) : null}
+              <img src={screenshot.dataUrl} alt={alt} />
+              {next ? (
+                <button className="lightboxNav lightboxNext" onClick={() => setLightbox(next.idx)} title="Next screenshot">
+                  <ArrowDown size={24} style={{ transform: "rotate(-90deg)" }} />
+                </button>
+              ) : null}
+              <button className="lightboxClose" aria-label={t("lightbox.close")} onClick={() => setLightbox(null)}><X size={20} /></button>
+              <div className="lightboxCounter">{currentPos + 1} / {stepsWithScreenshots.length}</div>
+            </div>
+          </div>
+        );
+      })() : null}
       {showManualForm && (
         <div className="modalOverlay" onClick={() => { setShowManualForm(false); setInsertAfterId(null); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
           <div className="modalContent" onClick={(e) => e.stopPropagation()}>
@@ -496,7 +521,7 @@ function StepCard({
   onDragEnter: () => void;
   onDragEnd: () => void;
   onDrop: () => void;
-  onZoom: (src: string, alt: string) => void;
+  onZoom: () => void;
 }) {
   const runtimeName = action.runtimeVariable?.name || runtimeVariableName(action.title, index + 1).toUpperCase();
   const confidence = Math.round(action.target.selectorConfidence * 100);
@@ -581,7 +606,7 @@ function StepCard({
       {dragHandle}
       <div>
         {screenshot ? (
-          <button className="shotButton" onClick={() => onZoom(screenshot.dataUrl, alt)} title={t("step.zoom")}>
+          <button className="shotButton" onClick={onZoom} title={t("step.zoom")}>
             <img src={screenshot.dataUrl} alt={alt} />
           </button>
         ) : (
