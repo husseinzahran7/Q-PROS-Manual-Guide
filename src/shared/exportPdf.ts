@@ -1,25 +1,43 @@
 import { jsPDF } from "jspdf";
 import type { SessionBundle, RecordedAction, ScreenshotRecord } from "./types";
+import { shouldMaskAction } from "./sanitize";
+import { safeDescription, safeTitle } from "./stepText";
 
 function byActionId(screenshots: ScreenshotRecord[]) {
   return new Map(screenshots.map((s) => [s.actionId, s]));
 }
 
-function actionDescription(action: RecordedAction): string {
-  if (action.type === "note") return action.title || "Manual step";
+export function actionDescription(action: RecordedAction): string {
+  if (action.type === "note") {
+    if (shouldMaskAction(action)) return safeDescription(action);
+    return action.title || "Manual step";
+  }
   if (action.type === "wait") return action.title || `Wait ${action.value || "2"}s`;
   if (action.type === "click") {
     return `Click on "${action.target.ariaLabel || action.target.text || action.target.selector}"`;
   }
   if (action.type === "input") {
     const base = `Type in "${action.target.ariaLabel || action.target.placeholder || action.target.selector}"`;
-    return action.value && action.valuePolicy !== "runtime" ? `${base}: ${action.value}` : base;
+    if (shouldMaskAction(action)) return `${base}: [REDACTED - sensitive]`;
+    return action.value ? `${base}: ${action.value}` : base;
   }
   if (action.type === "keydown") return `Press key "${action.key}"`;
   if (action.type === "navigation") return `Navigate to ${action.page.url}`;
   if (action.type === "change") {
     const base = `Change value in "${action.target.ariaLabel || action.target.selector}"`;
+    if (shouldMaskAction(action)) return `${base}: [REDACTED - sensitive]`;
     return action.value ? `${base}: ${action.value}` : base;
+  }
+  if (action.type === "paste") {
+    const base = `Paste content into "${action.target.ariaLabel || action.target.placeholder || action.target.selector}"`;
+    if (shouldMaskAction(action)) return `${base}: [REDACTED - sensitive]`;
+    return action.value ? `${base}: ${action.value}` : base;
+  }
+  if (action.type === "dialog") {
+    const kind = action.dialog?.kind ?? "dialog";
+    if (kind === "prompt" && shouldMaskAction(action)) return `Respond to browser prompt: [REDACTED - sensitive]`;
+    if (kind === "prompt" && action.dialog?.response) return `Respond to browser prompt: ${action.dialog.response}`;
+    return `Browser ${kind} dialog appeared`;
   }
   if (action.type === "submit") return "Submit form";
   return `${action.type}`;
@@ -87,7 +105,8 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(224, 90, 85);
-    doc.text(`Step ${step}: ${action.title}`, pageWidth / 2, yPosition, { align: "center" });
+    const stepTitle = shouldMaskAction(action) ? safeTitle(action, step) : action.title;
+    doc.text(`Step ${step}: ${stepTitle}`, pageWidth / 2, yPosition, { align: "center" });
     yPosition += 22;
 
     // Action description
