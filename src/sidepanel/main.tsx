@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { ArrowLeft, FileText, FileDown, ChevronDown, ChevronUp, Trash2, Loader2 } from "lucide-react";
 import type { RecordingSession, RecordedAction, ScreenshotRecord, SessionBundle } from "../shared/types";
+import { AzurePushPanel } from "../shared/AzurePushPanel";
 import "./styles.css";
 
 function send<T>(message: unknown): Promise<{ ok: boolean; data?: T; error?: string }> {
@@ -223,6 +224,8 @@ function App() {
               {exporting === "pdf" ? <><Loader2 size={14} className="spin" /> Generating...</> : <><FileDown size={14} /> Export PDF</>}
             </button>
           </div>
+
+          <AzurePushPanel sessionId={bundle.session.id} sessionTitle={bundle.session.title} />
 
           {/* Status */}
           {status && (

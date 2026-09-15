@@ -6,6 +6,7 @@ import { isOk, sendMessage } from "../shared/messages";
 import { runtimeVariableName } from "../shared/sanitize";
 import { t } from "../shared/i18n";
 import type { ExportType, RecordedAction, RecordingSession, ScreenshotRecord, SessionBundle, StorageEstimate } from "../shared/types";
+import { AzurePushPanel } from "../shared/AzurePushPanel";
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -343,6 +344,12 @@ function Editor() {
                 <button className="danger small" onClick={() => void clearAll()}><Trash2 size={12} /> {t("editor.clearAll")}</button>
               ) : null}
             </div>
+          ) : null}
+          {bundle ? (
+            <details className="azurePush" style={{ marginTop: 12 }}>
+              <summary style={{ cursor: "pointer", fontSize: 12 }}>{t("azure.title")}</summary>
+              <AzurePushPanel sessionId={bundle.session.id} sessionTitle={bundle.session.title} />
+            </details>
           ) : null}
         </aside>
         <section className="content">
