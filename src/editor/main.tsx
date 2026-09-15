@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { FileDown, FileText, Plus, Clock, StickyNote, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Trash2, X, ImagePlus } from "lucide-react";
 import "../styles.css";
 import { isOk, sendMessage } from "../shared/messages";
+import { blobFromBase64, download, mimeForFilename } from "../shared/download";
+import { EXPORT_MENU } from "../shared/exportMenu";
 import { runtimeVariableName } from "../shared/sanitize";
 import { t } from "../shared/i18n";
 import type { ExportType, RecordedAction, RecordingSession, ScreenshotRecord, SessionBundle, StorageEstimate } from "../shared/types";
@@ -44,31 +46,6 @@ type ExportResponse = {
   base64?: string;
   mimeType?: string;
 };
-
-function download(filename: string, content: string | Blob, type = "text/markdown") {
-  const blob = content instanceof Blob ? content : new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function mimeForFilename(filename: string) {
-  if (filename.endsWith(".ts")) return "text/typescript";
-  if (filename.endsWith(".json")) return "application/json";
-  return "text/markdown";
-}
-
-function blobFromBase64(base64: string, type: string) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new Blob([bytes], { type });
-}
 
 function Toast({ message, kind, onDone }: { message: string; kind: "error" | "success"; onDone: () => void }) {
   useEffect(() => {
@@ -169,7 +146,7 @@ function Editor() {
         setManualScreenshot(null);
         setShowManualForm(false);
         setInsertAfterId(null);
-        setToast({ message: "Manual step added", kind: "success" });
+        setToast({ message: t("manual.added"), kind: "success" });
       } else {
         showError(response.error);
       }
@@ -304,12 +281,20 @@ function Editor() {
         <div className="topbarTitle">
           <span className="kicker">{t("editor.kicker")}</span>
           <h1>{bundle ? bundle.session.title : t("editor.title")}</h1>
-          <span className="topbarCredit">by Hussein Zahran</span>
+          <span className="topbarCredit">{t("sidepanel.credit")}</span>
         </div>
         <div className="topbarActions">
           <button disabled={!bundle} onClick={() => openManualFormAfter(null)}><ImagePlus size={14} /> {t("editor.addManual")}</button>
           <button disabled={!bundle} onClick={() => void exportBundle("docx")}><FileText size={14} /> {t("editor.export.docx")}</button>
           <button disabled={!bundle} onClick={() => void exportBundle("pdf")}><FileDown size={14} /> {t("editor.export.pdf")}</button>
+          <details className="moreFormats">
+            <summary>{t("editor.moreFormats")}</summary>
+            <div className="moreFormatsMenu">
+              {EXPORT_MENU.filter((option) => option.type !== "docx" && option.type !== "pdf").map((option) => (
+                <button key={option.type} disabled={!bundle} onClick={() => void exportBundle(option.type)}>{t(option.labelKey)}</button>
+              ))}
+            </div>
+          </details>
         </div>
       </header>
       <section className="layout">
@@ -381,7 +366,7 @@ function Editor() {
                         onZoom={() => setLightbox(index)}
                       />
                       <button className="insertBetween" onClick={() => openManualFormAfter(action.id)}>
-                        <Plus size={12} /> Add step here
+                        <Plus size={12} /> {t("editor.addStepHere")}
                       </button>
                     </div>
                   ))}
@@ -429,13 +414,13 @@ function Editor() {
           <div className="lightboxOverlay" onClick={() => setLightbox(null)}>
             <div className="lightbox" onClick={(e) => e.stopPropagation()}>
               {prev ? (
-                <button className="lightboxNav lightboxPrev" onClick={() => setLightbox(prev.idx)} title="Previous screenshot">
+                <button className="lightboxNav lightboxPrev" onClick={() => setLightbox(prev.idx)} title={t("lightbox.prev")}>
                   <ArrowLeft size={24} />
                 </button>
               ) : null}
               <img src={screenshot.dataUrl} alt={alt} />
               {next ? (
-                <button className="lightboxNav lightboxNext" onClick={() => setLightbox(next.idx)} title="Next screenshot">
+                <button className="lightboxNav lightboxNext" onClick={() => setLightbox(next.idx)} title={t("lightbox.next")}>
                   <ArrowRight size={24} />
                 </button>
               ) : null}
@@ -448,42 +433,42 @@ function Editor() {
       {showManualForm && (
         <div className="modalOverlay" onClick={() => { setShowManualForm(false); setInsertAfterId(null); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
           <div className="modalContent" onClick={(e) => e.stopPropagation()}>
-            <h3>{insertAfterId ? "Insert step here" : "Add manual step"}</h3>
+            <h3>{insertAfterId ? t("manual.insertTitle") : t("manual.addTitle")}</h3>
             <p className="muted" style={{ margin: "0 0 12px", fontSize: 12 }}>
-              Add a step with your own screenshot (e.g. from Postman, desktop app, database, etc.)
+              {t("manual.body")}
             </p>
             <label className="manualField">
-              <span>Title *</span>
+              <span>{t("manual.titleLabel")}</span>
               <input
                 value={manualTitle}
                 onChange={(event) => setManualTitle(event.target.value)}
-                placeholder="e.g. Verify API response in Postman"
+                placeholder={t("manual.titlePlaceholder")}
               />
             </label>
             <label className="manualField">
-              <span>Description</span>
+              <span>{t("manual.descLabel")}</span>
               <textarea
                 value={manualDesc}
                 onChange={(event) => setManualDesc(event.target.value)}
-                placeholder="Describe what this step covers..."
+                placeholder={t("manual.descPlaceholder")}
               />
             </label>
             <label className="manualField">
-              <span>Screenshot (optional)</span>
+              <span>{t("manual.shotLabel")}</span>
               <input type="file" accept="image/*" onChange={handleManualScreenshot} />
             </label>
             {manualScreenshot && (
               <div className="manualPreview">
-                <img src={manualScreenshot} alt="Preview" />
-                <button className="danger small" onClick={() => setManualScreenshot(null)}><Trash2 size={12} /> Remove</button>
+                <img src={manualScreenshot} alt={t("manual.previewAlt")} />
+                <button className="danger small" onClick={() => setManualScreenshot(null)}><Trash2 size={12} /> {t("manual.remove")}</button>
               </div>
             )}
             <div className="manualActions">
               <button className="primary" disabled={!manualTitle.trim()} onClick={() => void insertManualStep()}>
-                <Plus size={14} /> Add Step
+                <Plus size={14} /> {t("manual.add")}
               </button>
               <button onClick={() => { setShowManualForm(false); setInsertAfterId(null); setManualTitle(""); setManualDesc(""); setManualScreenshot(null); }}>
-                Cancel
+                {t("manual.cancel")}
               </button>
             </div>
           </div>

@@ -130,6 +130,12 @@
 }
 
 /* ---------- Export buttons ---------- */
+.sp-export-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
 .sp-export-row {
   display: flex;
   gap: 8px;
@@ -252,10 +258,76 @@
   margin: 8px 0;
 }
 .sp-step-url,
-.sp-step-time {
+.sp-step-time,
+.sp-step-meta {
   font-size: 11px;
   color: var(--muted);
   margin: 4px 0;
+}
+.sp-low-conf {
+  color: #dc2626;
+  font-style: normal;
+  font-weight: 600;
+}
+.sp-locator {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 6px 0;
+}
+.sp-locator-code {
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin-top: 4px;
+  word-break: break-all;
+}
+.sp-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sp-mini-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--fg-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sp-mini-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sp-deleted {
+  margin-top: 12px;
+}
+.sp-deleted-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+.sp-deleted-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--bg-elevated);
+}
+.sp-deleted-title {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sp-step-img {
   width: 100%;
