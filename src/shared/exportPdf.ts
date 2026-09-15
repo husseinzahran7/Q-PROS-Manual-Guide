@@ -60,7 +60,7 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
   doc.setFontSize(9);
   doc.setFont("helvetica", "italic");
   doc.setTextColor(170, 170, 170);
-  doc.text("Created by Hussein Zahran", pageWidth / 2, centerY + 100, { align: "center" });
+  doc.text("Created by Q-PROS", pageWidth / 2, centerY + 100, { align: "center" });
 
   // Separator line
   doc.setFont("helvetica", "normal");

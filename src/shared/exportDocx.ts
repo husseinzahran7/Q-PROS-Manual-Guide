@@ -115,7 +115,7 @@ export async function generateDocx(bundle: SessionBundle): Promise<Blob> {
     new Paragraph({
       children: [
         new TextRun({
-          text: "Created by Hussein Zahran",
+          text: "Created by Q-PROS",
           size: 16,
           color: "aaaaaa",
           italics: true,
