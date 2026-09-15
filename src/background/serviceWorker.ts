@@ -1,5 +1,12 @@
-import { db, getSessionBundle } from "../shared/db";
+import { db, getSessionBundle, pruneOrphanScreenshots } from "../shared/db";
 import { RecentActionDeduper } from "../shared/actionIntegrity";
+import {
+  nextAppendedStepNumber,
+  planManualInsert,
+  resolveStepCollision,
+  screenshotPathForStep,
+  sortSteps
+} from "../shared/stepOrdering";
 import { generateDevtoolsRecorderJson, generateHumanGuide, generatePlaywright, generateSkillPackBase64 } from "../shared/exporters";
 import { generateDocx } from "../shared/exportDocx";
 import { generatePdf } from "../shared/exportPdf";
@@ -370,7 +377,7 @@ async function persistScreenshot(dataUrl: string | undefined, actionId: string, 
     actionId,
     stepNumber,
     dataUrl,
-    path: `screenshots/step-${String(stepNumber).padStart(3, "0")}.jpg`,
+    path: screenshotPathForStep(stepNumber),
     createdAt: now()
   };
   await db.screenshots.add(screenshot);
@@ -388,53 +395,89 @@ async function recordAction(payload: ActionPayload) {
 
   const session = await db.sessions.get(state.sessionId);
   if (!session) throw new Error("No active session");
-  const stepNumber = session.actionCount + 1;
+  // Provisional number for the capturing overlay only; the final number is
+  // allocated inside the write transaction below.
+  const provisionalNumber = session.actionCount + 1;
 
   // Capture FIRST, at action time — the action is recorded on pointerdown, so
   // the page hasn't navigated/re-rendered yet and the element the user is
   // acting on is still present (and maps to its recorded bounding box). Waiting
   // for the page to settle would screenshot the *result* page, where a click
   // that navigated has already made the target disappear.
-  void broadcastOverlay(targetTabs, { type: "recording:step-capturing", actionCount: stepNumber });
+  void broadcastOverlay(targetTabs, { type: "recording:step-capturing", actionCount: provisionalNumber });
   await setOverlayVisibility(targetTabs, false);
   const rawDataUrl = await scheduleScreenshot(tab?.windowId);
   void setOverlayVisibility(targetTabs, true);
   const dataUrl = rawDataUrl ? await annotateScreenshot(rawDataUrl, payload) : undefined;
 
   const actionId = id("action");
-  const action: RecordedAction = {
-    id: actionId,
-    sessionId: session.id,
-    stepNumber,
-    clientEventId: payload.clientEventId,
-    clientSequence: payload.clientSequence,
-    type: payload.type,
-    page: payload.page,
-    target: payload.target,
-    value: payload.value,
-    valueLabel: payload.valueLabel,
-    key: payload.key,
-    valuePolicy: payload.valuePolicy,
-    sensitive: payload.sensitive,
-    highRisk: Boolean(payload.highRisk),
-    title: generatedTitle(payload, stepNumber),
-    description: generatedDescription(payload),
-    createdAt: now(),
-    viewport: payload.viewport,
-    dialog: payload.dialog,
-    frameUrl: payload.frameUrl
-  };
-  await db.actions.add(action);
-  await db.sessions.update(session.id, { actionCount: stepNumber, updatedAt: now() });
+  let finalAction: RecordedAction | null = null;
+  let screenshotId: string | undefined;
+  let finalNumber = provisionalNumber;
+
+  // Transactional write: re-read fresh state so a concurrent insertManualStep /
+  // insertStep that slipped in during capture can never produce a duplicate
+  // stepNumber or a half-written action+screenshot pair.
+  await db.transaction("rw", db.actions, db.screenshots, db.sessions, async () => {
+    const freshSession = await db.sessions.get(session.id);
+    if (!freshSession) throw new Error("No active session");
+    const freshAll = await db.actions.where("sessionId").equals(session.id).toArray();
+    const freshLive = freshAll.filter((a) => !a.deleted);
+    const taken = new Set(freshAll.map((a) => a.stepNumber));
+    const desired = nextAppendedStepNumber(freshLive, freshSession.actionCount, freshAll);
+    finalNumber = resolveStepCollision(desired, taken);
+    const action: RecordedAction = {
+      id: actionId,
+      sessionId: session.id,
+      stepNumber: finalNumber,
+      clientEventId: payload.clientEventId,
+      clientSequence: payload.clientSequence,
+      type: payload.type,
+      page: payload.page,
+      target: payload.target,
+      value: payload.value,
+      valueLabel: payload.valueLabel,
+      key: payload.key,
+      valuePolicy: payload.valuePolicy,
+      sensitive: payload.sensitive,
+      highRisk: Boolean(payload.highRisk),
+      title: generatedTitle(payload, finalNumber),
+      description: generatedDescription(payload),
+      createdAt: now(),
+      viewport: payload.viewport,
+      dialog: payload.dialog,
+      frameUrl: payload.frameUrl
+    };
+    await db.actions.add(action);
+    await db.sessions.update(session.id, {
+      actionCount: Math.max(freshSession.actionCount, finalNumber),
+      updatedAt: now()
+    });
+    if (dataUrl) {
+      const screenshot = {
+        id: id("shot"),
+        sessionId: session.id,
+        actionId,
+        stepNumber: finalNumber,
+        dataUrl,
+        path: screenshotPathForStep(finalNumber),
+        createdAt: now()
+      };
+      await db.screenshots.add(screenshot);
+      screenshotId = screenshot.id;
+      await db.actions.update(actionId, { screenshotId });
+      finalAction = { ...action, screenshotId };
+    } else {
+      finalAction = action;
+    }
+  });
   // Re-read state before writing back so concurrent updates (e.g. tabs.onCreated
   // appending a new tabId) aren't clobbered by a stale spread.
   const latestState = await getState();
-  await setState({ ...latestState, actionCount: stepNumber });
-  const screenshotId = await persistScreenshot(dataUrl, actionId, session.id, stepNumber);
-  if (screenshotId) await db.actions.update(actionId, { screenshotId });
+  await setState({ ...latestState, actionCount: Math.max(latestState.actionCount ?? 0, finalNumber) });
   // Step is fully persisted (including screenshot) — signal the user can proceed.
-  void broadcastOverlay(latestState.tabIds ?? targetTabs, { type: "recording:step-complete", actionCount: stepNumber });
-  return { ...action, screenshotId };
+  void broadcastOverlay(latestState.tabIds ?? targetTabs, { type: "recording:step-complete", actionCount: finalNumber });
+  return finalAction;
 }
 
 async function broadcastOverlay(tabIds: number[], message: { type: string } & Record<string, unknown>) {
@@ -462,22 +505,30 @@ async function updateMeta(message: Extract<AppMessage, { type: "session:update-m
 async function deleteStep(actionId: string) {
   const action = await db.actions.get(actionId);
   if (!action) return null;
-  await db.actions.update(actionId, { deleted: true });
-  await db.sessions.update(action.sessionId, { updatedAt: now() });
+  await db.transaction("rw", db.actions, db.screenshots, db.sessions, async () => {
+    await db.actions.update(actionId, { deleted: true });
+    // Hard-delete its shots immediately so long guides don't accumulate orphans.
+    await db.screenshots.where("actionId").equals(actionId).delete();
+    await db.sessions.update(action.sessionId, { updatedAt: now() });
+  });
+  // Safety net for any previously orphaned shots in the same session.
+  await pruneOrphanScreenshots(action.sessionId).catch(() => undefined);
   return actionId;
 }
 
 async function restoreStep(actionId: string) {
   const action = await db.actions.get(actionId);
   if (!action) return null;
-  await db.actions.update(actionId, { deleted: false });
-  await db.sessions.update(action.sessionId, { updatedAt: now() });
+  await db.transaction("rw", db.actions, db.sessions, async () => {
+    await db.actions.update(actionId, { deleted: false });
+    await db.sessions.update(action.sessionId, { updatedAt: now() });
+  });
   return db.actions.get(actionId);
 }
 
 async function deletedSteps(sessionId: string) {
   const all = await db.actions.where("sessionId").equals(sessionId).sortBy("stepNumber");
-  return all.filter((action) => action.deleted);
+  return sortSteps(all).filter((action) => action.deleted);
 }
 
 // Insert a manual, non-DOM step (a free-text note or a timed wait). It appends
@@ -487,10 +538,12 @@ async function deletedSteps(sessionId: string) {
 async function insertStep(message: Extract<AppMessage, { type: "session:insert-step" }>) {
   const session = await db.sessions.get(message.sessionId);
   if (!session) throw new Error("Session not found");
-  const live = (await db.actions.where("sessionId").equals(message.sessionId).toArray()).filter((a) => !a.deleted);
-  const stepNumber = live.length + 1;
-  const last = await db.actions.where("sessionId").equals(message.sessionId).sortBy("stepNumber");
-  const page = last[last.length - 1]?.page ?? {
+  const all = await db.actions.where("sessionId").equals(message.sessionId).toArray();
+  const live = all.filter((a) => !a.deleted);
+  // max+1 (not count+1) so soft-deleted rows never cause a duplicate number.
+  const stepNumber = nextAppendedStepNumber(live, session.actionCount, all);
+  const sorted = sortSteps(all);
+  const page = sorted[sorted.length - 1]?.page ?? {
     url: session.startUrl ?? "",
     domain: session.startUrl ? new URL(session.startUrl).hostname : "",
     title: session.title
@@ -521,31 +574,42 @@ async function insertStep(message: Extract<AppMessage, { type: "session:insert-s
     createdAt: now(),
     manual: true
   };
-  await db.actions.add(action);
-  await db.sessions.update(message.sessionId, { actionCount: stepNumber, updatedAt: now() });
+  await db.transaction("rw", db.actions, db.sessions, async () => {
+    // Re-resolve inside the transaction: a concurrent recordAction may have
+    // claimed stepNumber between our read and write.
+    const freshAll = await db.actions.where("sessionId").equals(message.sessionId).toArray();
+    const freshSession = await db.sessions.get(message.sessionId);
+    const taken = new Set(freshAll.map((a) => a.stepNumber));
+    const finalNumber = resolveStepCollision(stepNumber, taken);
+    action.stepNumber = finalNumber;
+    await db.actions.add(action);
+    await db.sessions.update(message.sessionId, {
+      actionCount: Math.max(freshSession?.actionCount ?? finalNumber, finalNumber),
+      updatedAt: now()
+    });
+  });
   return getSessionBundle(message.sessionId);
 }
 
 async function insertManualStep(message: Extract<AppMessage, { type: "session:insert-manual-step" }>) {
   const session = await db.sessions.get(message.sessionId);
   if (!session) throw new Error("Session not found");
-  const live = (await db.actions.where("sessionId").equals(message.sessionId).toArray()).filter((a) => !a.deleted);
-  const sorted = live.sort((a, b) => a.stepNumber - b.stepNumber);
+  const all = await db.actions.where("sessionId").equals(message.sessionId).toArray();
+  const live = all.filter((a) => !a.deleted);
+  const sorted = sortSteps(live);
 
-  let stepNumber: number;
+  let provisionalNumber: number;
   let afterPage: RecordedAction["page"];
+  let shiftedIds: string[] = [];
 
   if (message.insertAfterActionId) {
-    const afterIndex = sorted.findIndex((a) => a.id === message.insertAfterActionId);
-    if (afterIndex === -1) throw new Error("Referenced step not found");
-    stepNumber = sorted[afterIndex].stepNumber + 1;
-    afterPage = sorted[afterIndex].page;
-    // Shift all subsequent steps down by 1
-    for (let i = afterIndex + 1; i < sorted.length; i += 1) {
-      await db.actions.update(sorted[i].id, { stepNumber: sorted[i].stepNumber + 1 });
-    }
+    const plan = planManualInsert(sorted, message.insertAfterActionId);
+    provisionalNumber = plan.stepNumber;
+    shiftedIds = plan.shiftedActionIds;
+    const after = sorted.find((a) => a.id === message.insertAfterActionId);
+    afterPage = after?.page as RecordedAction["page"];
   } else {
-    stepNumber = live.length + 1;
+    provisionalNumber = nextAppendedStepNumber(live, session.actionCount, all);
     const last = sorted[sorted.length - 1];
     afterPage = last?.page ?? {
       url: session.startUrl ?? "",
@@ -555,8 +619,10 @@ async function insertManualStep(message: Extract<AppMessage, { type: "session:in
   }
 
   const page = afterPage!;
-  const action: RecordedAction = {
-    id: id("action"),
+  const actionId = id("action");
+  const createdAt = now();
+  const buildAction = (stepNumber: number): RecordedAction => ({
+    id: actionId,
     sessionId: message.sessionId,
     stepNumber,
     type: "note",
@@ -574,33 +640,102 @@ async function insertManualStep(message: Extract<AppMessage, { type: "session:in
     highRisk: false,
     title: message.title || "Manual step",
     description: message.description || "Manually added step.",
-    createdAt: now(),
+    createdAt,
     manual: true
-  };
-  await db.actions.add(action);
-  if (message.screenshotDataUrl) {
-    const screenshot: ScreenshotRecord = {
-      id: id("screenshot"),
-      sessionId: message.sessionId,
-      actionId: action.id,
-      stepNumber,
-      dataUrl: message.screenshotDataUrl,
-      path: "",
-      createdAt: now()
-    };
-    await db.screenshots.add(screenshot);
-  }
-  await db.sessions.update(message.sessionId, { actionCount: live.length + 1, updatedAt: now() });
+  });
+
+  // Transactional shift + insert so a concurrent recordAction can never leave
+  // duplicate stepNumbers or half-shifted ranges.
+  await db.transaction("rw", db.actions, db.screenshots, db.sessions, async () => {
+    const freshAll = await db.actions.where("sessionId").equals(message.sessionId).toArray();
+    const freshLive = sortSteps(freshAll.filter((a) => !a.deleted));
+    const freshSession = await db.sessions.get(message.sessionId);
+    const taken = new Set(freshAll.map((a) => a.stepNumber));
+
+    if (message.insertAfterActionId) {
+      // Re-plan against fresh state: the anchor may have shifted.
+      const freshSorted = freshLive;
+      const anchor = freshSorted.find((a) => a.id === message.insertAfterActionId);
+      if (!anchor) throw new Error("Referenced step not found");
+      let desired = anchor.stepNumber + 1;
+      // Shift every live row at/after the gap, descending to avoid transient clashes.
+      const toShift = freshSorted
+        .filter((a) => a.stepNumber >= desired)
+        .sort((a, b) => b.stepNumber - a.stepNumber);
+      for (const row of toShift) {
+        const next = row.stepNumber + 1;
+        await db.actions.update(row.id, { stepNumber: next });
+        const shots = await db.screenshots.where("actionId").equals(row.id).toArray();
+        for (const shot of shots) {
+          await db.screenshots.update(shot.id, { stepNumber: next, path: screenshotPathForStep(next) });
+        }
+        taken.delete(row.stepNumber);
+        taken.add(next);
+      }
+      desired = resolveStepCollision(desired, taken);
+      const action = buildAction(desired);
+      await db.actions.add(action);
+      if (message.screenshotDataUrl) {
+        const screenshot: ScreenshotRecord = {
+          id: id("screenshot"),
+          sessionId: message.sessionId,
+          actionId: action.id,
+          stepNumber: desired,
+          dataUrl: message.screenshotDataUrl,
+          path: screenshotPathForStep(desired),
+          createdAt: now()
+        };
+        await db.screenshots.add(screenshot);
+      }
+      const newMax = Math.max(desired, ...toShift.map((r) => r.stepNumber + 1), freshSession?.actionCount ?? 0);
+      await db.sessions.update(message.sessionId, { actionCount: newMax, updatedAt: now() });
+    } else {
+      const desired = resolveStepCollision(
+        nextAppendedStepNumber(freshLive, freshSession?.actionCount, freshAll),
+        taken
+      );
+      const action = buildAction(desired);
+      await db.actions.add(action);
+      if (message.screenshotDataUrl) {
+        const screenshot: ScreenshotRecord = {
+          id: id("screenshot"),
+          sessionId: message.sessionId,
+          actionId: action.id,
+          stepNumber: desired,
+          dataUrl: message.screenshotDataUrl,
+          path: screenshotPathForStep(desired),
+          createdAt: now()
+        };
+        await db.screenshots.add(screenshot);
+      }
+      await db.sessions.update(message.sessionId, {
+        actionCount: Math.max(freshSession?.actionCount ?? desired, desired),
+        updatedAt: now()
+      });
+    }
+  });
+  // provisionalNumber/shiftedIds above were pre-transaction estimates; the
+  // transaction re-planned against fresh state. Keep vars referenced to
+  // preserve intent for future optimistic-UI use.
+  void provisionalNumber;
+  void shiftedIds;
   return getSessionBundle(message.sessionId);
 }
 
 async function reorderSteps(sessionId: string, actionIds: string[]) {
-  await db.transaction("rw", db.actions, db.sessions, async () => {
+  await db.transaction("rw", db.actions, db.screenshots, db.sessions, async () => {
     for (let index = 0; index < actionIds.length; index += 1) {
-      await db.actions.update(actionIds[index], { stepNumber: index + 1 });
+      const stepNumber = index + 1;
+      await db.actions.update(actionIds[index], { stepNumber });
+      // Keep denormalized screenshot stepNumbers + paths in lockstep.
+      const shots = await db.screenshots.where("actionId").equals(actionIds[index]).toArray();
+      for (const shot of shots) {
+        await db.screenshots.update(shot.id, { stepNumber, path: screenshotPathForStep(stepNumber) });
+      }
     }
     await db.sessions.update(sessionId, { updatedAt: now() });
   });
+  await pruneOrphanScreenshots(sessionId).catch(() => undefined);
   return getSessionBundle(sessionId);
 }
 
@@ -747,12 +882,18 @@ async function handleMessage(message: AppMessage, sender: chrome.runtime.Message
     if (message.type === "session:get") return ok(await getSessionBundle(message.sessionId));
     if (message.type === "session:update-step") return ok(await updateStep(message));
     if (message.type === "session:update-meta") return ok(await updateMeta(message));
-    if (message.type === "session:delete-step") return ok(await deleteStep(message.actionId));
+    if (message.type === "session:delete-step")
+      return ok(await enqueueActionWrite(() => deleteStep(message.actionId)));
     if (message.type === "session:restore-step") return ok(await restoreStep(message.actionId));
     if (message.type === "session:deleted-steps") return ok(await deletedSteps(message.sessionId));
-    if (message.type === "session:insert-step") return ok(await insertStep(message));
-    if (message.type === "session:insert-manual-step") return ok(await insertManualStep(message));
-    if (message.type === "session:reorder-steps") return ok(await reorderSteps(message.sessionId, message.actionIds));
+    // Serialize step mutations with live recording writes so concurrent
+    // insert+record can never claim the same stepNumber.
+    if (message.type === "session:insert-step")
+      return ok(await enqueueActionWrite(() => insertStep(message)));
+    if (message.type === "session:insert-manual-step")
+      return ok(await enqueueActionWrite(() => insertManualStep(message)));
+    if (message.type === "session:reorder-steps")
+      return ok(await enqueueActionWrite(() => reorderSteps(message.sessionId, message.actionIds)));
     if (message.type === "session:delete") return ok(await deleteSession(message.sessionId));
     if (message.type === "storage:estimate") return ok(await storageEstimate());
     if (message.type === "storage:clear") return ok(await clearStorage());
