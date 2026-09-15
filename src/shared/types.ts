@@ -195,6 +195,7 @@ export type AppMessage =
   | { type: "session:delete"; sessionId: string }
   | { type: "storage:estimate" }
   | { type: "storage:clear" }
+  | { type: "storage:prune"; keepNewest?: number }
   | { type: "export:create"; sessionId: string; exportType: ExportType };
 
 export interface StorageEstimate {
@@ -204,6 +205,10 @@ export interface StorageEstimate {
   actionCount: number;
   screenshotCount: number;
   perSession: { sessionId: string; screenshotBytes: number; actionCount: number; screenshotCount: number }[];
+  /* Thread 7: quota/cap warning surfaced to UI. Null when healthy. */
+  warning?: string | null;
+  quotaWarn?: boolean;
+  perSessionCapBytes?: number;
 }
 
 export type AppResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };

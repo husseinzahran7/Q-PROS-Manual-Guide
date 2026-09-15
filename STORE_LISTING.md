@@ -94,6 +94,9 @@ Press Alt+Shift+R to start or stop recording anywhere.
   only to observe native alert/confirm/prompt dialogs) into the recorded page.
 - **`storage`:** Persist recordings locally (IndexedDB) and remember UI
   preferences such as the overlay position.
+- **`unlimitedStorage`:** Recordings are screenshot-heavy (JPEG ~80KB/step after
+  downsample; a 500-step guide ≈40MB). Without this, Chrome may evict large
+  local guides. No data leaves the device — this only raises the local quota.
 - **`sidePanel`:** Display the step editor and guide library in the browser side panel.
 - **`downloads`:** Save exported Word (.docx) and PDF files to the user's chosen location.
 - **Remote code:** None. All scripts are bundled in the package. Web fonts

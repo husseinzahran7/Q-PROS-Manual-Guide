@@ -68,6 +68,12 @@ const dict = {
   "editor.sessionMeta": { en: "{n} steps", zh: "{n} 步" },
   "editor.storage": { en: "{n} recordings · {usage}", zh: "{n} 条记录 · {usage}" },
   "editor.clearAll": { en: "Clear all data", zh: "清空全部数据" },
+  "editor.pruneOld": { en: "Prune old (keep 10)", zh: "清理旧记录（保留10条）" },
+  "editor.confirmPrune": {
+    en: "Delete oldest recordings, keeping the 10 newest? The active recording is always kept.",
+    zh: "删除最旧的录制，只保留最新的10条？正在录制的会始终保留。"
+  },
+  "editor.storageWarn": { en: "Storage warning: {msg}", zh: "存储告警：{msg}" },
   "editor.deleteRecording": { en: "Delete recording", zh: "删除该记录" },
   "editor.confirmDeleteSession": {
     en: "Delete this recording and all of its steps and screenshots?",
