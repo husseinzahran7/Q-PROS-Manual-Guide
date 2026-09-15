@@ -9,9 +9,13 @@ import {
   generateStartContextJson,
   generateTaskBrief,
   generateTrajectoryJsonl,
-  generateValidationsYaml
+  generateValidationsYaml,
+  locatorCode,
+  safeHostname
 } from "./exporters";
-import type { SessionBundle } from "./types";
+import { dataUrlToUint8Array, imageTypeFromDataUrl } from "./exportDocx";
+import { pdfImageFormat } from "./exportPdf";
+import type { RecordedAction, SessionBundle } from "./types";
 
 const bundle: SessionBundle = {
   session: {
@@ -215,5 +219,92 @@ describe("exporters", () => {
     expect(manifest).toContain("start_url: \"https://example.com/login\"");
     expect(manifest).toContain("start_context_file: start-context.json");
     expect(manifest).toContain("write_back_policy: additive_only");
+  });
+
+  it("safeHostname falls back to unknown on edge URLs", () => {
+    expect(safeHostname("https://example.com/login")).toBe("example.com");
+    expect(safeHostname("about:blank")).toBe("unknown");
+    expect(safeHostname("")).toBe("unknown");
+    expect(safeHostname("not a url")).toBe("unknown");
+    expect(safeHostname("chrome://extensions")).not.toBe("");
+  });
+
+  it("start context never crashes on about:blank", () => {
+    const blankBundle: SessionBundle = {
+      ...bundle,
+      session: { ...bundle.session, startUrl: "about:blank" },
+      actions: [{ ...bundle.actions[0], page: { url: "about:blank", domain: "", title: "" } }]
+    };
+    const parsed = JSON.parse(generateStartContextJson(blankBundle));
+    expect(parsed.domain).toBe("unknown");
+    expect(parsed.url).toBe("about:blank");
+  });
+
+  it("Playwright nav skips URL assertion on unparseable URL", () => {
+    const blankBundle: SessionBundle = {
+      ...bundle,
+      actions: [
+        {
+          ...bundle.actions[0],
+          id: "nav_blank",
+          type: "navigation",
+          title: "Open blank",
+          page: { url: "about:blank", domain: "", title: "" }
+        }
+      ]
+    };
+    const code = generatePlaywright(blankBundle);
+    expect(code).toContain("about:blank");
+    expect(code).toContain("Skipped URL assertion");
+    expect(code).not.toContain("toHaveURL(//)");
+  });
+
+  it("locatorCode preserves colons in accessible name", () => {
+    const action: RecordedAction = {
+      ...bundle.actions[0],
+      target: {
+        ...bundle.actions[0].target,
+        candidates: [{ kind: "role", value: "button:Submit:extra", confidence: 0.9 }]
+      }
+    };
+    expect(locatorCode(action)).toContain("Submit:extra");
+    const noColon: RecordedAction = {
+      ...bundle.actions[0],
+      target: {
+        ...bundle.actions[0].target,
+        candidates: [{ kind: "role", value: "button", confidence: 0.9 }]
+      }
+    };
+    expect(locatorCode(noColon)).toContain("getByRole('button'");
+  });
+
+  it("maps JPEG bytes to jpg for docx ImageRun", () => {
+    expect(imageTypeFromDataUrl("data:image/jpeg;base64,AAAA")).toBe("jpg");
+    expect(imageTypeFromDataUrl("data:image/jpg;base64,AAAA")).toBe("jpg");
+    expect(imageTypeFromDataUrl("data:image/png;base64,AAAA")).toBe("png");
+    const bytes = dataUrlToUint8Array("data:image/jpeg;base64,AAAA");
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(bytes.length).toBe(3);
+  });
+
+  it("detects PDF image format with PNG fallback", () => {
+    expect(pdfImageFormat("data:image/png;base64,AAAA")).toBe("PNG");
+    expect(pdfImageFormat("data:image/jpeg;base64,AAAA")).toBe("JPEG");
+    expect(pdfImageFormat("data:image/jpg;base64,AAAA")).toBe("JPEG");
+  });
+
+  it("handles 100-step session without throwing", () => {
+    const actions = Array.from({ length: 100 }, (_, i) => ({
+      ...bundle.actions[0],
+      id: `action_${i}`,
+      stepNumber: i + 1,
+      type: "navigation" as const,
+      title: `Nav ${i + 1}`,
+      page: { url: `https://example.com/p${i}`, domain: "example.com", title: `P${i}` }
+    }));
+    const big: SessionBundle = { ...bundle, actions, screenshots: [] };
+    expect(() => generatePlaywright(big)).not.toThrow();
+    expect(() => generateTrajectoryJsonl(big)).not.toThrow();
+    expect(generatePlaywright(big)).toContain("Step 100");
   });
 });

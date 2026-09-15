@@ -5,7 +5,7 @@ function byActionId(screenshots: ScreenshotRecord[]) {
   return new Map(screenshots.map((s) => [s.actionId, s]));
 }
 
-function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+export function dataUrlToUint8Array(dataUrl: string): Uint8Array {
   const base64 = dataUrl.split(",")[1] || "";
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -13,6 +13,13 @@ function dataUrlToUint8Array(dataUrl: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+export function imageTypeFromDataUrl(dataUrl: string): "jpg" | "png" | "gif" {
+  const header = dataUrl.slice(0, 32).toLowerCase();
+  if (header.includes("image/png")) return "png";
+  if (header.includes("image/gif")) return "gif";
+  return "jpg";
 }
 
 function actionDescription(action: RecordedAction, index: number): string {
@@ -186,7 +193,7 @@ export async function generateDocx(bundle: SessionBundle): Promise<Blob> {
           new Paragraph({
             children: [
               new ImageRun({
-                type: "png",
+                type: imageTypeFromDataUrl(screenshot.dataUrl),
                 data: imageData,
                 transformation: {
                   width: 600,

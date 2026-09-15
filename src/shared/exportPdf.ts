@@ -5,6 +5,10 @@ function byActionId(screenshots: ScreenshotRecord[]) {
   return new Map(screenshots.map((s) => [s.actionId, s]));
 }
 
+export function pdfImageFormat(dataUrl: string): "JPEG" | "PNG" {
+  return dataUrl.slice(0, 32).toLowerCase().includes("image/png") ? "PNG" : "JPEG";
+}
+
 function actionDescription(action: RecordedAction): string {
   if (action.type === "note") return action.title || "Manual step";
   if (action.type === "wait") return action.title || `Wait ${action.value || "2"}s`;
@@ -112,23 +116,36 @@ export async function generatePdf(bundle: SessionBundle): Promise<Blob> {
 
     // Screenshot
     if (screenshot) {
+      const imgWidth = Math.min(contentWidth, 500);
+      const imgHeight = imgWidth * 0.6; // Approximate aspect ratio
+
+      // Check if screenshot fits on current page
+      if (yPosition + imgHeight > pageHeight - margin) {
+        doc.addPage();
+        yPosition = margin;
+      }
+
+      const imgX = (pageWidth - imgWidth) / 2;
+      const primaryFormat = pdfImageFormat(screenshot.dataUrl);
+      const fallbackFormat = primaryFormat === "JPEG" ? "PNG" : "JPEG";
+      let embedded = false;
       try {
-        const imgWidth = Math.min(contentWidth, 500);
-        const imgHeight = imgWidth * 0.6; // Approximate aspect ratio
-
-        // Check if screenshot fits on current page
-        if (yPosition + imgHeight > pageHeight - margin) {
-          doc.addPage();
-          yPosition = margin;
-        }
-
-        const imgX = (pageWidth - imgWidth) / 2;
-        doc.addImage(screenshot.dataUrl, "JPEG", imgX, yPosition, imgWidth, imgHeight);
-        yPosition += imgHeight + 20;
+        doc.addImage(screenshot.dataUrl, primaryFormat, imgX, yPosition, imgWidth, imgHeight);
+        embedded = true;
       } catch {
+        try {
+          doc.addImage(screenshot.dataUrl, fallbackFormat, imgX, yPosition, imgWidth, imgHeight);
+          embedded = true;
+        } catch {
+          embedded = false;
+        }
+      }
+      if (embedded) {
+        yPosition += imgHeight + 20;
+      } else {
         doc.setFontSize(10);
         doc.setTextColor(153, 153, 153);
-        doc.text("[Screenshot could not be embedded]", pageWidth / 2, yPosition, { align: "center" });
+        doc.text("[Screenshot could not be embedded: unsupported PNG/JPEG data]", pageWidth / 2, yPosition, { align: "center" });
         yPosition += 20;
       }
     }

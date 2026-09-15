@@ -21,10 +21,16 @@ function startUrl(bundle: SessionBundle) {
 }
 
 function startDomain(url: string) {
+  return safeHostname(url);
+}
+
+export function safeHostname(url: string): string {
   try {
-    return new URL(url).hostname;
+    if (!url) return "unknown";
+    const hostname = new URL(url).hostname;
+    return hostname || "unknown";
   } catch {
-    return "";
+    return "unknown";
   }
 }
 
@@ -491,14 +497,16 @@ function escapeForTs(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-function locatorCode(action: RecordedAction) {
+export function locatorCode(action: RecordedAction) {
   const role = action.target.candidates.find((candidate) => candidate.kind === "role");
   const label = action.target.candidates.find((candidate) => candidate.kind === "label");
   const placeholder = action.target.candidates.find((candidate) => candidate.kind === "placeholder");
   const text = action.target.candidates.find((candidate) => candidate.kind === "text");
 
   if (role) {
-    const [roleName, accessibleName] = role.value.split(":");
+    const separator = role.value.indexOf(":");
+    const roleName = separator === -1 ? role.value : role.value.slice(0, separator);
+    const accessibleName = separator === -1 ? "" : role.value.slice(separator + 1);
     return `page.getByRole('${escapeForTs(roleName)}', { name: '${escapeForTs(accessibleName || "")}' })`;
   }
   if (label) return `page.getByLabel('${escapeForTs(label.value)}')`;
@@ -534,7 +542,12 @@ export function generatePlaywright(bundle: SessionBundle) {
     }
     if (action.type === "navigation") {
       lines.push(`  await page.goto('${escapeForTs(action.page.url)}');`);
-      lines.push(`  await expect(page).toHaveURL(/${escapeForTs(new URL(action.page.url).hostname)}/);`);
+      const hostname = safeHostname(action.page.url);
+      if (hostname !== "unknown") {
+        lines.push(`  await expect(page).toHaveURL(/${escapeForTs(hostname)}/);`);
+      } else {
+        lines.push(`  // Skipped URL assertion: unparseable URL ${JSON.stringify(action.page.url)}`);
+      }
       return;
     }
     if (action.type === "note") {
