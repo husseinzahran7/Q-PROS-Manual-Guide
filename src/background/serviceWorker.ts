@@ -1,5 +1,12 @@
 import { db, getSessionBundle } from "../shared/db";
 import { RecentActionDeduper } from "../shared/actionIntegrity";
+import {
+  DEDUPE_STORAGE_KEY,
+  OVERLAY_ACK_TIMEOUT_MS,
+  mergeOverlayTargets,
+  resolveCaptureWindowId,
+  withAckTimeout,
+} from "../shared/workerReliability";
 import { generateDevtoolsRecorderJson, generateHumanGuide, generatePlaywright, generateSkillPackBase64 } from "../shared/exporters";
 import { generateDocx } from "../shared/exportDocx";
 import { generatePdf } from "../shared/exportPdf";
@@ -110,6 +117,31 @@ async function getState(): Promise<RecordingState> {
 async function setState(state: RecordingState) {
   await chrome.storage.session.set({ [STATE_KEY]: state });
 }
+
+// MV3 suspend wipes RAM (actionDeduper Map, queues). Persist the dedupe
+// fingerprints to chrome.storage.session on every accept and rehydrate on
+// startup / lazily before record. Queues themselves are promise chains and
+// can't be serialized — they safely reset to resolved on restart while Dexie
+// + storage.session remain the durable source of truth.
+async function persistDedupe() {
+  try {
+    await chrome.storage.session.set({ [DEDUPE_STORAGE_KEY]: actionDeduper.snapshot() });
+  } catch {
+    /* storage unavailable; dedupe stays in-memory only */
+  }
+}
+
+async function rehydrateDedupe() {
+  try {
+    if (actionDeduper.size > 0) return;
+    const stored = await chrome.storage.session.get(DEDUPE_STORAGE_KEY);
+    actionDeduper.restore(stored[DEDUPE_STORAGE_KEY]);
+  } catch {
+    /* storage unavailable; keep empty deduper */
+  }
+}
+
+void rehydrateDedupe();
 
 async function currentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -350,16 +382,25 @@ function annotateScreenshot(dataUrl: string, payload: ActionPayload): Promise<st
 }
 
 // Toggle the on-page REC overlay so it never appears in stored screenshots.
-// Targets the top frame and awaits a paint frame (the content script responds
-// after rAF) so the change is composited before captureVisibleTab runs.
+// Targets the top frame and awaits the content script's double-rAF ack (the
+// script responds after 2x requestAnimationFrame) so the change is composited
+// before captureVisibleTab runs. Falls back after OVERLAY_ACK_TIMEOUT_MS so a
+// missing/dead content script never hangs the screenshot pipeline.
+async function sendOverlayVisibility(tabId: number, visible: boolean) {
+  try {
+    const ack = chrome.tabs.sendMessage(
+      tabId,
+      { type: "recording:overlay-visibility", visible },
+      { frameId: 0 }
+    );
+    await withAckTimeout(ack, OVERLAY_ACK_TIMEOUT_MS);
+  } catch {
+    /* no listener / tab gone; proceed to capture anyway */
+  }
+}
+
 async function setOverlayVisibility(tabIds: number[], visible: boolean) {
-  await Promise.allSettled(
-    tabIds.map((tabId) =>
-      chrome.tabs
-        .sendMessage(tabId, { type: "recording:overlay-visibility", visible }, { frameId: 0 })
-        .catch(() => undefined)
-    )
-  );
+  await Promise.allSettled(tabIds.map((tabId) => sendOverlayVisibility(tabId, visible)));
 }
 
 async function persistScreenshot(dataUrl: string | undefined, actionId: string, sessionId: string, stepNumber: number) {
@@ -377,14 +418,29 @@ async function persistScreenshot(dataUrl: string | undefined, actionId: string, 
   return screenshot.id;
 }
 
-async function recordAction(payload: ActionPayload) {
+async function recordAction(payload: ActionPayload, sender?: chrome.runtime.MessageSender) {
   const state = await getState();
   if (state.status !== "recording" || !state.sessionId) return null;
   if (state.paused) return null;
+  // MV3 suspend wipes the in-memory Map. Rehydrate from session storage
+  // before the dedupe check so a restart inside the TTL still rejects doubles.
+  await rehydrateDedupe();
   if (!actionDeduper.shouldAccept(payload)) return null;
+  void persistDedupe();
 
+  const senderTabId = sender?.tab?.id;
+  const senderWindowId = sender?.tab?.windowId;
   const tab = state.tabId ? await chrome.tabs.get(state.tabId).catch(() => undefined) : await currentTab();
-  const targetTabs = state.tabIds ?? (state.tabId ? [state.tabId] : []);
+  const baseTargets = state.tabIds ?? (state.tabId ? [state.tabId] : []);
+  const targetTabs = mergeOverlayTargets(baseTargets, senderTabId);
+  // Correct-tab shots: capture the sender tab's window, not state.tabId's
+  // window. In multi-window runs the old code shot the start window even
+  // when the event fired in a child window.
+  const captureWindowId = resolveCaptureWindowId({
+    senderWindowId,
+    senderTabId,
+    stateTabWindowId: tab?.windowId,
+  });
 
   const session = await db.sessions.get(state.sessionId);
   if (!session) throw new Error("No active session");
@@ -397,7 +453,7 @@ async function recordAction(payload: ActionPayload) {
   // that navigated has already made the target disappear.
   void broadcastOverlay(targetTabs, { type: "recording:step-capturing", actionCount: stepNumber });
   await setOverlayVisibility(targetTabs, false);
-  const rawDataUrl = await scheduleScreenshot(tab?.windowId);
+  const rawDataUrl = await scheduleScreenshot(captureWindowId);
   void setOverlayVisibility(targetTabs, true);
   const dataUrl = rawDataUrl ? await annotateScreenshot(rawDataUrl, payload) : undefined;
 
@@ -741,7 +797,7 @@ async function handleMessage(message: AppMessage, sender: chrome.runtime.Message
           return ok(null);
         }
       }
-      return ok(await enqueueActionWrite(() => recordAction(message.payload)));
+      return ok(await enqueueActionWrite(() => recordAction(message.payload, sender)));
     }
     if (message.type === "session:list") return ok(await listSessions());
     if (message.type === "session:get") return ok(await getSessionBundle(message.sessionId));
@@ -830,4 +886,21 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   if (!state.tabIds.includes(tabId)) return;
   const next = state.tabIds.filter((id) => id !== tabId);
   await setState({ ...state, tabIds: next });
+});
+
+// MV3 lifecycle: the SW can be killed at any time. Persist dedupe so the next
+// incarnation still rejects duplicates, and rehydrate on wake/startup.
+// Queues reset to resolved — Dexie + storage.session are the durable truth.
+try {
+  chrome.runtime.onSuspend?.addListener(() => {
+    void persistDedupe();
+  });
+} catch {
+  /* onSuspend unavailable in some contexts */
+}
+chrome.runtime.onStartup?.addListener(() => {
+  void rehydrateDedupe();
+});
+chrome.runtime.onInstalled?.addListener(() => {
+  void rehydrateDedupe();
 });
