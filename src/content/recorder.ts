@@ -1,5 +1,16 @@
 import { buildElementTarget } from "../shared/selector";
 import { isSensitiveField } from "../shared/sanitize";
+import {
+  CHANGE_INPUT_SUPPRESS_MS,
+  NAV_COALESCE_MS,
+  isClickInsideForm,
+  isNavigationTrigger,
+  isSameNavigationUrl,
+  shouldSuppressChange,
+  shouldSuppressNavigation,
+  shouldSuppressSubmit,
+  wasRecently
+} from "../shared/recorderAccuracy";
 import { t } from "../shared/i18n";
 import type {
   ActionPayload,
@@ -16,6 +27,18 @@ const inputTimers = new Map<Element, number>();
 const earlyClickTargets = new WeakMap<Element, number>();
 const clickRecordedAt = new WeakMap<Element, number>();
 let lastClickTime = 0;
+// Whether the last recorded click can plausibly cause a navigation (link,
+// button, submit). A navigation step arriving right after such a click is the
+// click's consequence — suppress it. Clicks on non-navigating controls must
+// NOT suppress a following navigation (correlated, not blanket wall-clock).
+let lastClickWasNavTrigger = false;
+let lastClickTarget: Element | null = null;
+// Coalescing timer for SPA redirect chains (pushState + replaceState + async
+// guard resolving within milliseconds): only the committed URL is recorded.
+let navFireTimer: number | null = null;
+// Targets with a flushed/recorded input step; a change event arriving right
+// after (typing + blur, incl. CJK commit + blur) would double-record.
+const inputRecordedAt = new WeakMap<Element, number>();
 let clientSequence = 0;
 let lastNavigationUrl = location.href;
 let composing = false;
@@ -185,7 +208,19 @@ function flushInput(target: Element) {
   if (!timer) return;
   window.clearTimeout(timer);
   inputTimers.delete(target);
+  // Rebuild the payload fresh at flush time so the committed value (all
+  // keystrokes up to now, incl. IME commits) lands in the step — never a
+  // stale snapshot.
+  inputRecordedAt.set(target, Date.now());
   void record(buildAction({ type: "input", target, override: { composedInput: true } }));
+}
+
+// Flush every pending input debounce, rebuilding each payload fresh. Used
+// before navigation / hide / unload / stop so tail input is never lost.
+function flushAllInputs() {
+  const pending: Element[] = [];
+  inputTimers.forEach((_timer, target) => pending.push(target));
+  for (const target of pending) flushInput(target);
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -196,6 +231,8 @@ function onPointerDown(event: PointerEvent) {
   earlyClickTargets.set(target, now);
   clickRecordedAt.set(target, now);
   lastClickTime = now;
+  lastClickWasNavTrigger = isNavigationTrigger(target);
+  lastClickTarget = target;
   void record(actionFromEvent("click", event));
 }
 
@@ -207,6 +244,8 @@ function onClick(event: MouseEvent) {
   const now = Date.now();
   clickRecordedAt.set(target, now);
   lastClickTime = now;
+  lastClickWasNavTrigger = isNavigationTrigger(target);
+  lastClickTarget = target;
   void record(actionFromEvent("click", event));
 }
 
@@ -231,15 +270,16 @@ function onInput(event: Event) {
 
   const target = meaningfulTarget(event);
   if (!target || !isInputtable(target)) return;
-  // Build the payload eagerly so the value is captured at event time, not
-  // 450ms later when the debounce fires (DOM may have changed by then).
-  const payload = buildAction({ type: "input", target, override: { composedInput: true } });
   const existing = inputTimers.get(target);
   if (existing) window.clearTimeout(existing);
   // Long debounce — input steps are only flushed on blur/Enter/Tab/navigation,
   // not during natural typing pauses. This keeps "we go to the gym" as one step.
+  // The payload is rebuilt fresh when the timer fires (see flushInput), so the
+  // committed value at flush time lands in the step — no lost tail input.
   const timer = window.setTimeout(() => {
-    void record(payload);
+    inputTimers.delete(target);
+    inputRecordedAt.set(target, Date.now());
+    void record(buildAction({ type: "input", target, override: { composedInput: true } }));
   }, 5000);
   inputTimers.set(target, timer);
 }
@@ -252,13 +292,18 @@ function onCompositionEnd(event: CompositionEvent) {
   composing = false;
   const target = meaningfulTarget(event);
   if (!target || !isInputtable(target)) return;
-  // Schedule a short follow-up emit so the committed string lands as one
-  // recorded action without racing the next keystroke.
+  // Browsers fire a follow-up input event carrying the committed string
+  // immediately after compositionend. Let THAT event schedule the debounce so
+  // CJK typing lands as exactly one input step. This fallback only fires when
+  // no input follows (some IMEs/autofill paths) — and the follow-up input
+  // clears it first, so the two can never double-record.
   const existing = inputTimers.get(target);
   if (existing) window.clearTimeout(existing);
   const timer = window.setTimeout(() => {
+    inputTimers.delete(target);
+    inputRecordedAt.set(target, Date.now());
     void record(buildAction({ type: "input", target, override: { composedInput: true } }));
-  }, 80);
+  }, 150);
   inputTimers.set(target, timer);
 }
 
@@ -275,6 +320,15 @@ function onChange(event: Event) {
   const target = meaningfulTarget(event);
   if (!target || !isFormValueControl(target)) return;
   if (clickSupersedes(target)) return;
+  // Typing + blur (incl. CJK commit + blur) flushes an input step first; the
+  // trailing change event for the same value would double-record it.
+  if (
+    shouldSuppressChange({
+      clickedRecently: false,
+      inputRecordedRecently: wasRecently(inputRecordedAt.get(target), Date.now(), CHANGE_INPUT_SUPPRESS_MS)
+    })
+  )
+    return;
   void record(actionFromEvent("change", event));
 }
 
@@ -288,8 +342,13 @@ function onSubmit(event: Event) {
     }
   }
   // The click on the submit button already recorded this action; the submit
-  // event is just the DOM consequence.
-  if (Date.now() - lastClickTime < 500) return;
+  // event is just the DOM consequence — but only when the click was inside
+  // THIS form. A click elsewhere followed by an Enter-submit must still record.
+  const clickInsideForm =
+    form instanceof HTMLFormElement && lastClickTarget
+      ? isClickInsideForm(form, lastClickTarget)
+      : false;
+  if (shouldSuppressSubmit({ lastClickAt: lastClickTime, now: Date.now(), clickInsideForm })) return;
   void record(actionFromEvent("submit", event));
 }
 
@@ -393,42 +452,59 @@ function recordDialog(detail: DialogInfo) {
 }
 
 function recordNavigation() {
-  if (location.href === lastNavigationUrl) return;
+  // Only the top frame owns navigation steps. Every iframe runs this same
+  // content script with its own location/lastNavigationUrl; letting frames
+  // record yields one phantom navigation step per iframe navigation.
+  if (window !== window.top) return;
+  if (isSameNavigationUrl(location.href, lastNavigationUrl)) return;
   lastNavigationUrl = location.href;
-  // Flush any pending input debounces before recording navigation
-  const pendingTargets: Element[] = [];
-  inputTimers.forEach((_timer, target) => pendingTargets.push(target));
-  for (const target of pendingTargets) {
-    const timer = inputTimers.get(target);
-    if (timer) window.clearTimeout(timer);
-    inputTimers.delete(target);
-    void record(buildAction({ type: "input", target, override: { composedInput: true } }));
-  }
-  // Navigation caused by a recorded click is redundant — the click step
-  // already documents the user's intent to navigate.
-  if (Date.now() - lastClickTime < 2000) return;
-  void refreshState().then(() =>
-    record({
-      clientEventId: `evt_${Date.now()}_${++clientSequence}`,
-      clientSequence,
-      type: "navigation",
-      page: pageInfo(),
-      target: {
-        tagName: "document",
-        selector: "html",
-        xpath: "/html",
-        selectorConfidence: 1,
-        candidates: [{ kind: "css", value: "html", confidence: 1 }]
-      },
-      valuePolicy: "none",
-      sensitive: false,
-      viewport: viewportInfo(),
-      frameUrl: window !== window.top ? location.href : undefined
-    })
-  );
+  // Flush any pending input debounces (rebuilt fresh) before recording
+  // navigation so tail input is never lost on route changes.
+  flushAllInputs();
+  // Coalesce SPA redirect chains (pushState + replaceState + guard redirects
+  // within milliseconds) into a single step for the committed URL. The
+  // click-correlation check runs at fire time against the settled state.
+  if (navFireTimer !== null) window.clearTimeout(navFireTimer);
+  navFireTimer = window.setTimeout(() => {
+    navFireTimer = null;
+    // Navigation caused by a recorded click on a navigating control is
+    // redundant — the click step already documents the user's intent.
+    // Correlated by trigger kind, not blanket wall-clock: a click on a
+    // checkbox followed by an unrelated route change still records the nav.
+    if (
+      shouldSuppressNavigation({
+        lastClickAt: lastClickTime,
+        lastClickWasNavTrigger,
+        now: Date.now()
+      })
+    )
+      return;
+    void refreshState().then(() =>
+      record({
+        clientEventId: `evt_${Date.now()}_${++clientSequence}`,
+        clientSequence,
+        type: "navigation",
+        page: pageInfo(),
+        target: {
+          tagName: "document",
+          selector: "html",
+          xpath: "/html",
+          selectorConfidence: 1,
+          candidates: [{ kind: "css", value: "html", confidence: 1 }]
+        },
+        valuePolicy: "none",
+        sensitive: false,
+        viewport: viewportInfo(),
+        frameUrl: undefined
+      })
+    );
+  }, NAV_COALESCE_MS);
 }
 
 function patchHistory() {
+  // Top frame only — patching history inside iframes makes each frame's
+  // pushState/replaceState emit a phantom top-level navigation step.
+  if (window !== window.top) return;
   const origPush = history.pushState;
   const origReplace = history.replaceState;
   history.pushState = function (...args) {
@@ -685,6 +761,9 @@ if (!installFlag.__qprosManualGuideInstalled) {
       const nextCount = next.actionCount ?? 0;
       recordingState = { ...next, actionCount: Math.max(localCount, nextCount) };
     } else {
+      // Recording stopped elsewhere: flush tail input while record() still
+      // accepts it, before dropping into idle.
+      if (recordingState.status === "recording") flushAllInputs();
       recordingState = next;
     }
     syncOverlay();
@@ -761,9 +840,18 @@ if (!installFlag.__qprosManualGuideInstalled) {
   document.addEventListener("dragstart", onDragStart, true);
   document.addEventListener("drop", onDrop, true);
   document.addEventListener("toggle", onToggle, true);
-  window.addEventListener("popstate", recordNavigation);
-  window.addEventListener("hashchange", recordNavigation);
+  // Top frame only: popstate/hashchange drive top-level navigation steps, and
+  // recordNavigation itself also ignores non-top frames as a second gate.
+  if (isTopFrame) {
+    window.addEventListener("popstate", recordNavigation);
+    window.addEventListener("hashchange", recordNavigation);
+  }
   document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      // Tab hidden / BFCache park freezes timers: flush tail input now.
+      flushAllInputs();
+      return;
+    }
     if (document.visibilityState === "visible") {
       recordNavigation();
       // Resync overlay state — background tabs occasionally miss the
@@ -771,4 +859,8 @@ if (!installFlag.__qprosManualGuideInstalled) {
       void refreshState();
     }
   });
+  // Full-document teardown (link navigation, reload, tab close): best-effort
+  // flush of tail input before the content world is destroyed.
+  window.addEventListener("pagehide", () => flushAllInputs());
+  window.addEventListener("beforeunload", () => flushAllInputs());
 }
