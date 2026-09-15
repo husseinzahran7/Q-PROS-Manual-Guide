@@ -460,6 +460,44 @@ textarea {
   gap: 6px;
 }
 
+/* More-formats dropdown: same buttons as the topbar, shared export menu. */
+.moreFormats {
+  position: relative;
+}
+.moreFormats summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  background: var(--bg-card);
+}
+.moreFormats summary::-webkit-details-marker {
+  display: none;
+}
+.moreFormatsMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.moreFormatsMenu button {
+  justify-content: flex-start;
+  width: 100%;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(248px, 300px) minmax(0, 1fr);

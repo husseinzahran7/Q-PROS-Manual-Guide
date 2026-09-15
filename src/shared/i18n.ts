@@ -140,10 +140,61 @@ const dict = {
   "overlay.steps": { en: "{n} steps", zh: "{n} 步" },
   "overlay.capturing": { en: "· capturing…", zh: "· 记录中…" },
   "overlay.complete": { en: "· ✓ step {n} saved", zh: "· ✓ 第 {n} 步已记录，可继续" },
-  "overlay.paused": { en: "· paused", zh: "· 已暂停" }
+  "overlay.paused": { en: "· paused", zh: "· 已暂停" },
+  // Full export menu (shared sidepanel + editor)
+  "editor.export.skillpack": { en: "Skill Pack (ZIP)", zh: "Skill Pack（ZIP）" },
+  "editor.addStepHere": { en: "Add step here", zh: "在此添加步骤" },
+  // Manual step modal
+  "manual.addTitle": { en: "Add manual step", zh: "添加手动步骤" },
+  "manual.insertTitle": { en: "Insert step here", zh: "在此插入步骤" },
+  "manual.body": {
+    en: "Add a step with your own screenshot (e.g. from Postman, desktop app, database, etc.)",
+    zh: "用你自己的截图添加一个步骤（例如 Postman、桌面应用、数据库等）。"
+  },
+  "manual.titleLabel": { en: "Title *", zh: "标题 *" },
+  "manual.titlePlaceholder": { en: "e.g. Verify API response in Postman", zh: "例如：在 Postman 中验证接口返回" },
+  "manual.descLabel": { en: "Description", zh: "描述" },
+  "manual.descPlaceholder": { en: "Describe what this step covers...", zh: "描述这一步覆盖的内容……" },
+  "manual.shotLabel": { en: "Screenshot (optional)", zh: "截图（可选）" },
+  "manual.previewAlt": { en: "Preview", zh: "预览" },
+  "manual.remove": { en: "Remove", zh: "移除" },
+  "manual.add": { en: "Add Step", zh: "添加步骤" },
+  "manual.cancel": { en: "Cancel", zh: "取消" },
+  "manual.added": { en: "Manual step added", zh: "已添加手动步骤" },
+  // Lightbox nav
+  "lightbox.prev": { en: "Previous screenshot", zh: "上一张截图" },
+  "lightbox.next": { en: "Next screenshot", zh: "下一张截图" },
+  // Sidepanel
+  "sidepanel.title": { en: "Q-PROS Manual Guide", zh: "Q-PROS 操作指南" },
+  "sidepanel.credit": { en: "by Q-PROS", zh: "Q-PROS 出品" },
+  "sidepanel.select": { en: "Select a Recording Session", zh: "选择一条录制" },
+  "sidepanel.emptyTitle": { en: "No recordings yet", zh: "还没有录制" },
+  "sidepanel.emptyHint": {
+    en: "Click the extension icon and start recording to create your first session",
+    zh: "点击扩展图标并开始录制来创建第一条记录"
+  },
+  "sidepanel.status.recording": { en: "recording", zh: "录制中" },
+  "sidepanel.status.idle": { en: "idle", zh: "已结束" },
+  "sidepanel.back": { en: "Back to sessions", zh: "返回记录列表" },
+  "sidepanel.started": { en: "Started {date}", zh: "开始于 {date}" },
+  "sidepanel.generating": { en: "Generating {format}...", zh: "正在生成 {format}……" },
+  "sidepanel.exported": { en: "{format} exported successfully!", zh: "{format} 导出成功！" },
+  "sidepanel.exportError": { en: "Error: {msg}", zh: "出错：{msg}" },
+  "sidepanel.exportFailed": { en: "Export failed", zh: "导出失败" },
+  "sidepanel.loading": { en: "Loading steps...", zh: "正在加载步骤……" },
+  "sidepanel.deleteStep": { en: "Delete Step", zh: "删除步骤" },
+  "sidepanel.stepDeleted": { en: "Step deleted", zh: "已删除步骤" },
+  "sidepanel.deleteSession": { en: "Delete Session", zh: "删除该记录" },
+  "sidepanel.sessionDeleted": { en: "Session deleted", zh: "已删除记录" },
+  "sidepanel.url": { en: "URL: {url}", zh: "网址：{url}" },
+  "sidepanel.time": { en: "Time: {date}", zh: "时间：{date}" }
 } satisfies Record<string, Entry>;
 
 export type MessageKey = keyof typeof dict;
+
+/* Exposed for the i18n coverage check + unit tests: every t() key used
+   in src must resolve to a non-empty en + zh string. */
+export const dictionary: Record<string, Entry> = dict;
 
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {
   const entry = dict[key];
