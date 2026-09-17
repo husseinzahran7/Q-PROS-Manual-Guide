@@ -306,23 +306,44 @@ function boxInImage(payload: ActionPayload, scale: number) {
 }
 
 // Finalize a freshly captured screenshot: always downscale + JPEG-encode, and
-// either redact a sensitive field or ring the acted-on element. The capture is
-// taken at action time (pre-change), so the element is present and its recorded
-// box maps onto this frame. Full-page targets (e.g. dialog stand-ins) and
-// navigation steps have no meaningful element box, so they're left unringed.
+// either redact a sensitive field (+ its neighboring field group) or ring the
+// acted-on element. The capture is taken at action time (pre-change), so the
+// element is present and its recorded box maps onto this frame. Full-page
+// targets (e.g. dialog stand-ins) and navigation steps have no meaningful
+// element box, so they're left unringed/unredacted to avoid blacking the frame.
+export function sensitiveRedactRect(
+  box: { x: number; y: number; width: number; height: number },
+  info: { width: number; height: number }
+) {
+  // Tight field box + expanded group band covering label above and
+  // helper/error text below plus adjacent inline PII (e.g. show/hide toggle,
+  // inline validation). Clamped to image bounds.
+  const tightPad = 8;
+  const groupPadX = Math.min(info.width * 0.2, box.width * 0.8 + 24);
+  const groupPadY = box.height * 1.2 + 20;
+  const gx = Math.max(0, box.x - groupPadX);
+  const gy = Math.max(0, box.y - groupPadY);
+  const gw = Math.min(info.width - gx, box.width + groupPadX * 2);
+  const gh = Math.min(info.height - gy, box.height + groupPadY * 2);
+  const tx = Math.max(0, box.x - tightPad);
+  const ty = Math.max(0, box.y - tightPad);
+  const tw = Math.min(info.width - tx, box.width + tightPad * 2);
+  const th = Math.min(info.height - ty, box.height + tightPad * 2);
+  return { group: { x: gx, y: gy, width: gw, height: gh }, tight: { x: tx, y: ty, width: tw, height: th } };
+}
+
 function annotateScreenshot(dataUrl: string, payload: ActionPayload): Promise<string> {
   return renderScreenshot(dataUrl, (ctx, info) => {
     const box = boxInImage(payload, info.scale);
     if (payload.sensitive) {
-      if (!box) return;
-      const padding = 4;
+      if (!box || box.width < 2 || box.height < 2) return;
+      // Dialog stand-ins use document.body (full-page box) — no meaningful
+      // field to redact; blacking the whole frame would destroy the step.
+      if (box.width * box.height >= 0.9 * info.width * info.height) return;
+      if (payload.type === "navigation") return;
+      const { group } = sensitiveRedactRect(box, info);
       ctx.fillStyle = "#000";
-      ctx.fillRect(
-        Math.max(0, box.x - padding),
-        Math.max(0, box.y - padding),
-        Math.max(0, box.width + padding * 2),
-        Math.max(0, box.height + padding * 2)
-      );
+      ctx.fillRect(group.x, group.y, Math.max(0, group.width), Math.max(0, group.height));
       return;
     }
     if (payload.type === "navigation") return;

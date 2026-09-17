@@ -378,14 +378,24 @@ function recordDialog(detail: DialogInfo) {
   if (!target) return;
   const message = detail.message ? ` "${detail.message.slice(0, 80)}"` : "";
   const description = `Browser ${detail.kind} dialog${message}`;
+  // Privacy: prompt responses are user-typed secrets of unknown sensitivity.
+  // Never store the cleartext response — treat every prompt as
+  // sensitive/runtime so all exporters emit an env placeholder instead.
+  const isPrompt = detail.kind === "prompt";
+  const safeDialog: DialogInfo = isPrompt
+    ? { kind: detail.kind, message: detail.message, response: undefined, accepted: detail.accepted }
+    : detail;
   const payload = buildAction({
     type: "dialog",
     target,
     override: {
-      dialog: detail,
-      value: detail.response ?? (detail.accepted === undefined ? undefined : detail.accepted ? "accepted" : "dismissed"),
+      dialog: safeDialog,
+      value: isPrompt
+        ? undefined
+        : detail.response ?? (detail.accepted === undefined ? undefined : detail.accepted ? "accepted" : "dismissed"),
       valueLabel: description,
-      valuePolicy: detail.kind === "prompt" ? "literal" : "none",
+      valuePolicy: isPrompt ? "runtime" : "none",
+      sensitive: isPrompt ? true : false,
       highRisk: detail.kind === "beforeunload"
     }
   });

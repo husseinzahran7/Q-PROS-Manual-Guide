@@ -1,5 +1,7 @@
 import { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, AlignmentType, PageBreak } from "docx";
 import type { SessionBundle, RecordedAction, ScreenshotRecord } from "./types";
+import { shouldMaskAction } from "./sanitize";
+import { safeDescription, safeTitle } from "./stepText";
 
 function byActionId(screenshots: ScreenshotRecord[]) {
   return new Map(screenshots.map((s) => [s.actionId, s]));
@@ -15,21 +17,25 @@ function dataUrlToUint8Array(dataUrl: string): Uint8Array {
   return bytes;
 }
 
-function actionDescription(action: RecordedAction, index: number): string {
+export function actionDescription(action: RecordedAction, index: number): string {
   const step = index + 1;
+  const title = shouldMaskAction(action) ? safeTitle(action, step) : action.title;
   const parts: string[] = [];
-  parts.push(`Step ${step}: ${action.title}`);
+  parts.push(`Step ${step}: ${title}`);
 
   if (action.type === "note") {
-    if (action.description) parts.push(`Description: ${action.description}`);
+    if (shouldMaskAction(action)) parts.push(`Description: ${safeDescription(action)}`);
+    else if (action.description) parts.push(`Description: ${action.description}`);
   } else if (action.type === "wait") {
     parts.push(`Action: Wait ${action.value || "2"} seconds`);
   } else if (action.type === "click") {
     parts.push(`Action: Click on "${action.target.ariaLabel || action.target.text || action.target.selector}"`);
   } else if (action.type === "input") {
     parts.push(`Action: Type in "${action.target.ariaLabel || action.target.placeholder || action.target.selector}"`);
-    if (action.value && action.valuePolicy !== "runtime") {
+    if (action.value && !shouldMaskAction(action)) {
       parts.push(`Value: ${action.value}`);
+    } else if (shouldMaskAction(action)) {
+      parts.push(`Value: [REDACTED - sensitive, provide at runtime]`);
     }
   } else if (action.type === "keydown") {
     parts.push(`Action: Press key "${action.key}"`);
@@ -37,7 +43,26 @@ function actionDescription(action: RecordedAction, index: number): string {
     parts.push(`Action: Navigate to ${action.page.url}`);
   } else if (action.type === "change") {
     parts.push(`Action: Change value in "${action.target.ariaLabel || action.target.selector}"`);
-    if (action.value) parts.push(`Value: ${action.value}`);
+    if (action.value && !shouldMaskAction(action)) parts.push(`Value: ${action.value}`);
+    else if (shouldMaskAction(action)) parts.push(`Value: [REDACTED - sensitive, provide at runtime]`);
+  } else if (action.type === "paste") {
+    parts.push(`Action: Paste content into "${action.target.ariaLabel || action.target.placeholder || action.target.selector}"`);
+    if (action.value && !shouldMaskAction(action)) {
+      parts.push(`Value: ${action.value}`);
+    } else if (shouldMaskAction(action)) {
+      parts.push(`Value: [REDACTED - sensitive, provide at runtime]`);
+    }
+  } else if (action.type === "dialog") {
+    const kind = action.dialog?.kind ?? "dialog";
+    parts.push(`Action: Browser ${kind} dialog appeared`);
+    if (action.dialog?.message) parts.push(`Dialog message: ${action.dialog.message}`);
+    if (shouldMaskAction(action)) {
+      if (kind === "prompt") parts.push(`Response: [REDACTED - sensitive, provide at runtime]`);
+    } else if (action.dialog?.response) {
+      parts.push(`Response: ${action.dialog.response}`);
+    } else if (action.value && !shouldMaskAction(action)) {
+      parts.push(`Value: ${action.value}`);
+    }
   } else if (action.type === "submit") {
     parts.push(`Action: Submit form`);
   } else {
@@ -152,7 +177,7 @@ export async function generateDocx(bundle: SessionBundle): Promise<Blob> {
       new Paragraph({
         children: [
           new TextRun({
-            text: action.title,
+            text: shouldMaskAction(action) ? safeTitle(action, step) : action.title,
             bold: true,
             size: 24,
           }),

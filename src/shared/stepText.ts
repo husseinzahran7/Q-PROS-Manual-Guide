@@ -4,9 +4,19 @@ function targetName(action: Pick<RecordedAction | ActionPayload, "target">) {
   return action.target.ariaLabel || action.target.placeholder || action.target.text || action.target.name || action.target.id || action.target.selector;
 }
 
-function inputValue(action: Pick<RecordedAction | ActionPayload, "value" | "valuePolicy">): string | undefined {
+function inputValue(
+  action: Pick<RecordedAction | ActionPayload, "value" | "valuePolicy" | "sensitive">
+): string | undefined {
+  if (action.sensitive) return undefined;
   if (action.value && action.valuePolicy !== "runtime" && action.valuePolicy !== "masked") return action.value;
   return undefined;
+}
+
+function safeValueLabel(
+  action: Pick<RecordedAction | ActionPayload, "valueLabel" | "sensitive">
+): string | undefined {
+  if (action.sensitive) return undefined;
+  return action.valueLabel;
 }
 
 export function generatedTitle(action: ActionPayload, stepNumber: number) {
@@ -16,7 +26,7 @@ export function generatedTitle(action: ActionPayload, stepNumber: number) {
     return val ? `Enter "${val}" in ${target}` : `Enter value in ${target}`;
   }
   if (action.type === "change") {
-    const label = action.valueLabel ? ` to ${action.valueLabel}` : "";
+    const label = safeValueLabel(action) ? ` to ${safeValueLabel(action)}` : "";
     return `Change ${target}${label}`;
   }
   if (action.type === "submit") return `Submit ${target}`;
@@ -49,7 +59,7 @@ export function generatedDescription(action: ActionPayload) {
     return val ? `Type "${val}" into ${target}.` : `Type the required value into ${target}.`;
   }
   if (action.type === "change") {
-    const label = action.valueLabel ? ` (${action.valueLabel})` : "";
+    const label = safeValueLabel(action) ? ` (${safeValueLabel(action)})` : "";
     return `Set ${target}${label} to the recorded state.`;
   }
   if (action.type === "submit") return `Submit the form from ${action.page.title || action.page.url}.`;
@@ -74,4 +84,45 @@ export function generatedDescription(action: ActionPayload) {
     return `Acknowledge the browser alert${message}.`;
   }
   return `Select ${target}.`;
+}
+
+// Privacy: stored titles/descriptions may embed cleartext captured before a
+// step was marked Sensitive (e.g. `Enter "s3cr3t" in Token`). Exporters must
+// never emit those — regenerate from a value-stripped copy so the secret
+// can't leak via intent, comments, filenames, or env-var names.
+interface ExportableAction {
+  type: ActionPayload["type"];
+  target: ActionPayload["target"];
+  page: ActionPayload["page"];
+  value?: ActionPayload["value"];
+  valueLabel?: ActionPayload["valueLabel"];
+  valuePolicy: ActionPayload["valuePolicy"];
+  sensitive?: boolean | null;
+  key?: ActionPayload["key"];
+  dialog?: ActionPayload["dialog"];
+  title?: string;
+  description?: string;
+}
+
+function sanitizedCopy(action: ExportableAction): ActionPayload {
+  const base = action as ActionPayload & { title?: string; description?: string };
+  if (!action.sensitive) return base as ActionPayload;
+  return {
+    ...base,
+    value: undefined,
+    valueLabel: undefined,
+    dialog: base.dialog
+      ? { kind: base.dialog.kind, message: base.dialog.message, response: undefined, accepted: base.dialog.accepted }
+      : undefined
+  } as ActionPayload;
+}
+
+export function safeTitle(action: ExportableAction, stepNumber: number): string {
+  if (!action.sensitive) return action.title || generatedTitle(action as ActionPayload, stepNumber);
+  return generatedTitle(sanitizedCopy(action), stepNumber);
+}
+
+export function safeDescription(action: ExportableAction): string {
+  if (!action.sensitive) return action.description || generatedDescription(action as ActionPayload);
+  return generatedDescription(sanitizedCopy(action));
 }

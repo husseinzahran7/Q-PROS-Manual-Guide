@@ -33,3 +33,21 @@ export function runtimeVariableName(actionTitle: string, stepNumber: number) {
     .slice(0, 32);
   return `${slug || "step"}_${stepNumber}`;
 }
+
+// Privacy gate: an action's value must be treated as runtime/masked when it
+// is flagged sensitive, even if a stale valuePolicy still says "literal".
+// Exporters must use this — never valuePolicy alone — so a user toggling a
+// step to Sensitive after capture (or an old recording) can't leak cleartext.
+export function shouldMaskAction(action: { sensitive?: boolean; valuePolicy?: string | null }) {
+  if (action.sensitive) return true;
+  return action.valuePolicy === "runtime" || action.valuePolicy === "masked";
+}
+
+export const MASKED_PLACEHOLDER = "[MASKED]";
+
+export function maskExportValue(
+  action: { sensitive?: boolean; valuePolicy?: string | null; value?: string | null }
+): string | undefined {
+  if (shouldMaskAction(action)) return undefined;
+  return action.value ?? undefined;
+}

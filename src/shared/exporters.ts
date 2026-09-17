@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import type { RecordedAction, ScreenshotRecord, SessionBundle } from "./types";
-import { runtimeVariableName } from "./sanitize";
+import { runtimeVariableName, shouldMaskAction } from "./sanitize";
+import { safeDescription, safeTitle } from "./stepText";
 
 const SKILL_PACK_FORMAT = "q-pros-manual-guide.skill-pack.v2";
 
@@ -49,15 +50,32 @@ export function generateStartContextJson(bundle: SessionBundle) {
 }
 
 function runtimeVariableFor(action: RecordedAction, stepNumber: number) {
-  return action.runtimeVariable?.name || runtimeVariableName(action.title, stepNumber).toUpperCase();
+  if (action.runtimeVariable?.name) return action.runtimeVariable.name;
+  const title = shouldMaskAction(action) ? safeTitle(action, stepNumber) : action.title;
+  return runtimeVariableName(title, stepNumber).toUpperCase();
 }
 
-function actionPurpose(action: RecordedAction) {
+function actionPurpose(action: RecordedAction, stepNumber?: number) {
+  if (action.sensitive) {
+    if (action.type === "input") return "Provide a value required by the workflow.";
+    if (action.type === "navigation") return `Reach ${action.page.url}.`;
+    if (action.type === "submit") return "Submit the current form or advance the workflow.";
+    return `Advance the workflow by interacting with ${action.target.ariaLabel || action.target.text || action.target.selector}.`;
+  }
   if (action.description && action.description !== action.title) return action.description;
   if (action.type === "navigation") return `Reach ${action.page.url}.`;
   if (action.type === "input") return "Provide a value required by the workflow.";
   if (action.type === "submit") return "Submit the current form or advance the workflow.";
   return `Advance the workflow by interacting with ${action.target.ariaLabel || action.target.text || action.target.selector}.`;
+}
+
+function exportTitle(action: RecordedAction, stepNumber: number) {
+  return shouldMaskAction(action) ? safeTitle(action, stepNumber) : action.title;
+}
+
+function exportDescription(action: RecordedAction, stepNumber: number) {
+  void stepNumber;
+  return shouldMaskAction(action) ? safeDescription(action) : action.description;
 }
 
 export function generateAgentInstructions() {
@@ -212,7 +230,7 @@ export function generateAgentInstructions() {
 }
 
 export function generateTaskBrief(bundle: SessionBundle) {
-  const runtimeActions = bundle.actions.filter((action) => action.valuePolicy === "runtime");
+  const runtimeActions = bundle.actions.filter((action) => shouldMaskAction(action));
   const highRisk = bundle.actions.filter((action) => action.highRisk);
   return [
     `# Task Brief: ${bundle.session.title}`,
@@ -242,13 +260,13 @@ export function generateTaskBrief(bundle: SessionBundle) {
     "## Runtime Variables",
     "",
     runtimeActions.length
-      ? runtimeActions.map((action, index) => `- ${runtimeVariableFor(action, index + 1)}: required for "${action.title}".`).join("\n")
+      ? runtimeActions.map((action, index) => `- ${runtimeVariableFor(action, index + 1)}: required for "${exportTitle(action, index + 1)}".`).join("\n")
       : "- None recorded.",
     "",
     "## High-Risk Steps",
     "",
     highRisk.length
-      ? highRisk.map((action) => `- Step ${action.stepNumber}: ${action.title}`).join("\n")
+      ? highRisk.map((action) => `- Step ${action.stepNumber}: ${exportTitle(action, action.stepNumber)}`).join("\n")
       : "- None recorded. Still treat live high-risk actions as high risk.",
     "",
     "## Agent Notes",
@@ -279,11 +297,11 @@ export function generateHumanGuide(bundle: SessionBundle) {
   bundle.actions.forEach((action, index) => {
     const step = index + 1;
     const screenshot = screenshotMap.get(action.id);
-    lines.push(`${step}. ${action.title}`);
+    lines.push(`${step}. ${exportTitle(action, step)}`);
     lines.push("");
-    lines.push(`   ${action.description}`);
+    lines.push(`   ${exportDescription(action, step)}`);
     if (action.sensitive) lines.push("   Warning: this step contains sensitive data and should be handled carefully.");
-    if (action.valuePolicy === "runtime") lines.push(`   Runtime variable required: ${action.runtimeVariable?.name || runtimeVariableName(action.title, step)}.`);
+    if (shouldMaskAction(action)) lines.push(`   Runtime variable required: ${runtimeVariableFor(action, step)}.`);
     if (screenshot) lines.push(`   Screenshot: ${screenshotPath(step)}`);
     lines.push("");
   });
@@ -292,7 +310,7 @@ export function generateHumanGuide(bundle: SessionBundle) {
 }
 
 export function generateAgentTask(bundle: SessionBundle) {
-  const runtimeActions = bundle.actions.filter((action) => action.valuePolicy === "runtime");
+  const runtimeActions = bundle.actions.filter((action) => shouldMaskAction(action));
   const highRisk = bundle.actions.filter((action) => action.highRisk);
   return [
     `# Agent Task: ${bundle.session.title}`,
@@ -328,7 +346,7 @@ export function generateAgentTask(bundle: SessionBundle) {
     "## Runtime Variables",
     "",
     runtimeActions.length
-      ? runtimeActions.map((action, index) => `- ${action.runtimeVariable?.name || runtimeVariableName(action.title, index + 1)}: required for "${action.title}".`).join("\n")
+      ? runtimeActions.map((action, index) => `- ${runtimeVariableFor(action, index + 1)}: required for "${exportTitle(action, index + 1)}".`).join("\n")
       : "- None.",
     "",
     "## Execution Rules",
@@ -346,7 +364,7 @@ export function generateAgentTask(bundle: SessionBundle) {
     "",
     "- Confirm each target is visible before interacting when possible.",
     "- Confirm navigation or page title changes after navigation steps.",
-    highRisk.length ? `- High-risk steps: ${highRisk.map((action) => action.title).join(", ")}.` : "- No high-risk steps recorded.",
+    highRisk.length ? `- High-risk steps: ${highRisk.map((action) => exportTitle(action, action.stepNumber)).join(", ")}.` : "- No high-risk steps recorded.",
     ""
   ].join("\n");
 }
@@ -363,14 +381,25 @@ export function generateTrajectoryJsonl(bundle: SessionBundle) {
     credential_policy: "never_request_or_store_passwords"
   });
   const actionLines = bundle.actions
-    .map((action, index) =>
-      JSON.stringify({
+    .map((action, index) => {
+      const masked = shouldMaskAction(action);
+      const safeDialog = action.dialog
+        ? {
+            kind: action.dialog.kind,
+            // Page prompt text is needed for replay intent; the typed
+            // response is never exported when masked.
+            message: action.dialog.message,
+            response: masked ? undefined : action.dialog.response,
+            accepted: action.dialog.accepted
+          }
+        : undefined;
+      return JSON.stringify({
         type: "recorded_action",
         step_number: index + 1,
         recorded_client_sequence: action.clientSequence,
         recorded_client_event_id: action.clientEventId,
-        intent: action.title,
-        purpose: actionPurpose(action),
+        intent: exportTitle(action, index + 1),
+        purpose: masked ? actionPurpose(action, index + 1) : actionPurpose(action, index + 1),
         action_type: action.type,
         page: action.page,
         target_locator: preferredLocator(action),
@@ -379,8 +408,8 @@ export function generateTrajectoryJsonl(bundle: SessionBundle) {
         xpath_fallback: action.target.xpath,
         fallback_text: action.target.text,
         screenshot_path: screenshotPath(index + 1),
-        value_policy: action.valuePolicy,
-        runtime_variable_name: action.valuePolicy === "runtime" ? runtimeVariableFor(action, index + 1) : undefined,
+        value_policy: masked ? "runtime" : action.valuePolicy,
+        runtime_variable_name: masked ? runtimeVariableFor(action, index + 1) : undefined,
         sensitive: action.sensitive,
         high_risk: action.highRisk,
         auth_policy: "use_existing_session_only",
@@ -388,12 +417,12 @@ export function generateTrajectoryJsonl(bundle: SessionBundle) {
           ? "If already on a page that satisfies this step, continue from the closest matching state."
           : "If this exact target is unavailable but the step intent is clear, adapt using page semantics and stable DOM locators.",
         write_back_policy: "append_observations_to_learning_notes_only",
-        value_label: action.valueLabel,
+        value_label: masked ? undefined : action.valueLabel,
         viewport: action.viewport,
         frame_url: action.frameUrl,
-        dialog: action.dialog
-      })
-    )
+        dialog: safeDialog
+      });
+    })
     .join("\n");
   return [startContextLine, actionLines].filter(Boolean).join("\n");
 }
@@ -402,7 +431,7 @@ export function generateSelectorsJson(bundle: SessionBundle) {
   return JSON.stringify(
     bundle.actions.map((action, index) => ({
       step: index + 1,
-      title: action.title,
+      title: exportTitle(action, index + 1),
       selector: action.target.selector,
       xpath: action.target.xpath,
       confidence: action.target.selectorConfidence,
@@ -417,7 +446,7 @@ export function generateValidationsYaml(bundle: SessionBundle) {
   const lines = ["validations:"];
   bundle.actions.forEach((action, index) => {
     lines.push(`  - step: ${index + 1}`);
-    lines.push(`    title: ${yamlString(action.title)}`);
+    lines.push(`    title: ${yamlString(exportTitle(action, index + 1))}`);
     lines.push(`    require_visible_target: true`);
     if (action.type === "navigation") lines.push(`    expected_url: ${yamlString(action.page.url)}`);
     if (action.highRisk) lines.push(`    stop_before_execution: true`);
@@ -524,7 +553,7 @@ export function generatePlaywright(bundle: SessionBundle) {
     const step = index + 1;
     const locator = locatorCode(action);
     lines.push("");
-    lines.push(`  // Step ${step}: ${action.title}`);
+    lines.push(`  // Step ${step}: ${exportTitle(action, step)}`);
     if (action.target.selectorConfidence < 0.7) {
       lines.push("  // Low selector confidence: verify this locator before unattended replay.");
     }
@@ -538,7 +567,8 @@ export function generatePlaywright(bundle: SessionBundle) {
       return;
     }
     if (action.type === "note") {
-      lines.push(`  // Note: ${action.description || action.title}`);
+      const noteText = shouldMaskAction(action) ? exportDescription(action, step) : action.description || action.title;
+      lines.push(`  // Note: ${noteText}`);
       return;
     }
     if (action.type === "wait") {
@@ -548,22 +578,25 @@ export function generatePlaywright(bundle: SessionBundle) {
     }
     lines.push(`  await expect(${locator}).toBeVisible();`);
     if (action.type === "input") {
-      const value = action.valuePolicy === "runtime"
-        ? `process.env.${action.runtimeVariable?.name || runtimeVariableName(action.title, step).toUpperCase()}`
+      const value = shouldMaskAction(action)
+        ? `process.env.${runtimeVariableFor(action, step)}`
         : `'${escapeForTs(action.value || "")}'`;
       lines.push(`  await ${locator}.fill(${value} ?? '');`);
     } else if (action.type === "change") {
-      if (action.value) lines.push(`  await ${locator}.fill('${escapeForTs(action.value)}');`);
+      if (shouldMaskAction(action)) {
+        const varName = runtimeVariableFor(action, step);
+        lines.push(`  await ${locator}.fill(process.env.${varName} ?? '');`);
+      } else if (action.value) lines.push(`  await ${locator}.fill('${escapeForTs(action.value)}');`);
       else lines.push(`  await ${locator}.click();`);
     } else if (action.type === "keydown") {
       lines.push(`  await ${locator}.press('${escapeForTs(action.key || "Enter")}');`);
     } else if (action.type === "paste") {
-      const value = action.valuePolicy === "runtime"
-        ? `process.env.${action.runtimeVariable?.name || runtimeVariableName(action.title, step).toUpperCase()}`
+      const value = shouldMaskAction(action)
+        ? `process.env.${runtimeVariableFor(action, step)}`
         : `'${escapeForTs(action.value || "")}'`;
       lines.push(`  await ${locator}.fill(${value} ?? '');`);
     } else if (action.type === "upload") {
-      const varName = action.runtimeVariable?.name || runtimeVariableName(action.title, step).toUpperCase();
+      const varName = runtimeVariableFor(action, step);
       lines.push(`  // Recorded files: ${action.value ?? "none"}`);
       lines.push(`  await ${locator}.setInputFiles((process.env.${varName} ?? '').split(',').map(p => p.trim()).filter(Boolean));`);
     } else if (action.type === "rightclick") {
@@ -588,8 +621,8 @@ export function generatePlaywright(bundle: SessionBundle) {
       } else {
         const accept = action.dialog?.accepted !== false;
         if (kind === "prompt") {
-          const responseExpr = action.valuePolicy === "runtime"
-            ? `process.env.${action.runtimeVariable?.name || runtimeVariableName(action.title, step).toUpperCase()} ?? ''`
+          const responseExpr = shouldMaskAction(action)
+            ? `process.env.${runtimeVariableFor(action, step)} ?? ''`
             : `'${escapeForTs(action.dialog?.response || "")}'`;
           lines.push(`  page.once('dialog', async (dialog) => { await dialog.accept(${responseExpr}); });`);
         } else {
@@ -651,7 +684,7 @@ function devtoolsRecorderStep(action: RecordedAction, stepNumber: number) {
     return { type: "navigate", url: action.page.url, ...base };
   }
   if (action.type === "input" || action.type === "change" || action.type === "paste") {
-    const value = action.valuePolicy === "runtime"
+    const value = shouldMaskAction(action)
       ? `{{${action.runtimeVariable?.name || runtimeVariableName(action.title, stepNumber).toUpperCase()}}}`
       : action.value ?? "";
     return { type: "change", value, ...base };
