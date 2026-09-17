@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import type { RecordedAction, ScreenshotRecord, SessionBundle } from "./types";
 import { runtimeVariableName } from "./sanitize";
+import { AZURE_UPLOAD_MANIFEST_FILE, generateAzureUploadManifest } from "./azure";
 
 const SKILL_PACK_FORMAT = "q-pros-manual-guide.skill-pack.v2";
 
@@ -746,6 +747,7 @@ function createSkillPackZip(bundle: SessionBundle) {
   zip.file("replay.devtools.json", generateDevtoolsRecorderJson(bundle));
   zip.file("selectors/browser-selectors.json", generateSelectorsJson(bundle));
   zip.file("validations.yaml", generateValidationsYaml(bundle));
+  zip.file(AZURE_UPLOAD_MANIFEST_FILE, generateAzureUploadJson(bundle));
 
   const screenshots = byActionId(bundle.screenshots);
   bundle.actions.forEach((action, index) => {
@@ -756,6 +758,14 @@ function createSkillPackZip(bundle: SessionBundle) {
   });
 
   return zip;
+}
+
+/** Pipeline-ready Azure Test upload plan (no secrets, no image bytes). */
+export function generateAzureUploadJson(
+  bundle: SessionBundle,
+  opts?: { runName?: string; runFiles?: string[] }
+) {
+  return JSON.stringify(generateAzureUploadManifest(bundle, opts), null, 2);
 }
 
 export async function generateSkillPack(bundle: SessionBundle) {

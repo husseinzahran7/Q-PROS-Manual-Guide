@@ -216,4 +216,21 @@ describe("exporters", () => {
     expect(manifest).toContain("start_context_file: start-context.json");
     expect(manifest).toContain("write_back_policy: additive_only");
   });
+
+  it("includes an azure-upload.json pipeline manifest without secrets", async () => {
+    const base64 = await generateSkillPackBase64(bundle);
+    const zip = await JSZip.loadAsync(base64, { base64: true });
+    const file = zip.file("azure-upload.json");
+    expect(file).toBeTruthy();
+    const parsed = JSON.parse(await file!.async("string"));
+    expect(parsed.format).toBe("q-pros-manual-guide.azure-upload.v1");
+    expect(parsed.attachments).toHaveLength(1);
+    expect(parsed.attachments[0]).toMatchObject({
+      step: 1,
+      fileName: "step-001.jpg",
+      path: "screenshots/step-001.jpg"
+    });
+    expect(JSON.stringify(parsed)).not.toContain("data:image");
+    expect(parsed.attachments[0]).not.toHaveProperty("stream");
+  });
 });

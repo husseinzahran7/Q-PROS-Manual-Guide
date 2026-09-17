@@ -4,6 +4,28 @@ import { generateDevtoolsRecorderJson, generateHumanGuide, generatePlaywright, g
 import { generateDocx } from "../shared/exportDocx";
 import { generatePdf } from "../shared/exportPdf";
 import { generatedDescription, generatedTitle } from "../shared/stepText";
+import {
+  AZURE_CONFIG_KEY,
+  azureAuthHeader,
+  azureProjectsUrl,
+  azureResultAttachmentsUrl,
+  azureResultsUrl,
+  azureRunAttachmentsUrl,
+  azureRunUrl,
+  azureRunWebUrl,
+  azureRunsUrl,
+  buildAttachmentPayload,
+  buildCompleteRunPayload,
+  buildResultPayload,
+  buildRunPayload,
+  defaultRunName,
+  redactAzureConfig,
+  stepFileName,
+  stripDataUrlPrefix,
+  validateAzureConfig,
+  type AzureConfig,
+  type AzurePushResult
+} from "../shared/azure";
 import type { ActionPayload, AppMessage, AppResponse, ExportType, RecordedAction, RecordingSession, RecordingState, ScreenshotRecord, StorageEstimate } from "../shared/types";
 
 const STATE_KEY = "recordingState";
@@ -721,6 +743,173 @@ async function clearStorage() {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Azure DevOps Test push (MVP). PAT lives in chrome.storage.local only —
+// never sync/session — is sent only as an Authorization header, and is never
+// logged. Attachments upload sequentially to avoid Azure throttling.
+// ---------------------------------------------------------------------------
+
+async function getAzureConfig(): Promise<AzureConfig | null> {
+  const stored = await chrome.storage.local.get(AZURE_CONFIG_KEY);
+  const raw = stored[AZURE_CONFIG_KEY] as Partial<AzureConfig> | undefined;
+  if (!raw?.org?.trim() || !raw?.project?.trim() || !raw?.pat) return null;
+  return { org: raw.org.trim(), project: raw.project.trim(), pat: raw.pat };
+}
+
+async function saveAzureConfig(config: { org: string; project: string; pat: string }) {
+  const next: AzureConfig = {
+    org: config.org.trim(),
+    project: config.project.trim(),
+    pat: config.pat
+  };
+  const errors = validateAzureConfig(next);
+  if (errors.length) throw new Error(errors.join(" "));
+  // Local only: PAT must never enter chrome.storage.sync.
+  await chrome.storage.local.set({ [AZURE_CONFIG_KEY]: next });
+  return redactAzureConfig(next);
+}
+
+async function clearAzureConfig() {
+  await chrome.storage.local.remove(AZURE_CONFIG_KEY);
+  return true;
+}
+
+async function azureFetchJson(url: string, pat: string, init?: RequestInit): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...((init?.headers as Record<string, string> | undefined) ?? {}),
+        Authorization: azureAuthHeader(pat)
+      }
+    });
+  } catch (error) {
+    throw new Error(`Azure request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    const detail = body.slice(0, 300);
+    throw new Error(`Azure responded ${response.status} ${response.statusText}${detail ? `: ${detail}` : ""}`);
+  }
+  if (response.status === 204) return null;
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+async function testAzureConnection() {
+  const config = await getAzureConfig();
+  if (!config) throw new Error("Azure is not configured. Save organization, project, and PAT first.");
+  const data = (await azureFetchJson(azureProjectsUrl(config.org), config.pat)) as {
+    value?: { name?: string }[];
+    count?: number;
+  };
+  const projects = Array.isArray(data?.value) ? data.value : [];
+  const names = projects.map((entry) => entry?.name).filter(Boolean) as string[];
+  return {
+    organization: config.org,
+    project: config.project,
+    projectFound: names.some((name) => name.toLowerCase() === config.project.toLowerCase()),
+    projectCount: data?.count ?? projects.length
+  };
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+async function pushSessionToAzure(
+  message: Extract<AppMessage, { type: "azure:push-run" }>
+): Promise<AzurePushResult> {
+  const config = await getAzureConfig();
+  if (!config) throw new Error("Azure is not configured. Save organization, project, and PAT first.");
+  const errors = validateAzureConfig(config);
+  if (errors.length) throw new Error(errors.join(" "));
+  const bundle = await getSessionBundle(message.sessionId);
+  if (bundle.actions.length === 0) throw new Error("Nothing to push: this recording has no steps.");
+
+  const runName = message.runName?.trim() || defaultRunName(bundle.session.title);
+  let runId = message.runId;
+  if (runId === undefined) {
+    const created = (await azureFetchJson(azureRunsUrl(config.org, config.project), config.pat, {
+      method: "POST",
+      body: JSON.stringify(buildRunPayload(runName))
+    })) as { id?: number };
+    if (typeof created?.id !== "number") throw new Error("Azure did not return a run id.");
+    runId = created.id;
+  }
+
+  const createdResults = (await azureFetchJson(azureResultsUrl(config.org, config.project, runId), config.pat, {
+    method: "POST",
+    body: JSON.stringify(buildResultPayload(bundle))
+  })) as { id?: number }[] | { id?: number };
+  const resultId = Array.isArray(createdResults) ? createdResults[0]?.id : createdResults?.id;
+  if (typeof resultId !== "number") throw new Error("Azure did not return a result id.");
+
+  const shotsByAction = new Map(bundle.screenshots.map((shot) => [shot.actionId, shot]));
+  let attachmentCount = 0;
+  // Sequential: Azure throttles parallel attachment POSTs on one result.
+  for (let index = 0; index < bundle.actions.length; index += 1) {
+    const action = bundle.actions[index];
+    const shot = shotsByAction.get(action.id);
+    if (!shot) continue;
+    const stream = stripDataUrlPrefix(shot.dataUrl);
+    if (!stream) continue;
+    const step = index + 1;
+    await azureFetchJson(
+      azureResultAttachmentsUrl(config.org, config.project, runId, resultId),
+      config.pat,
+      {
+        method: "POST",
+        body: JSON.stringify(buildAttachmentPayload(stream, stepFileName(step), `Step ${step}: ${action.title}`))
+      }
+    );
+    attachmentCount += 1;
+  }
+
+  let runAttachmentCount = 0;
+  if (message.includePdf) {
+    const pdfBlob = await generatePdf(bundle);
+    const pdfBase64 = arrayBufferToBase64(await pdfBlob.arrayBuffer());
+    const slug =
+      bundle.session.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() ||
+      "q-pros-manual-guide";
+    await azureFetchJson(azureRunAttachmentsUrl(config.org, config.project, runId), config.pat, {
+      method: "POST",
+      body: JSON.stringify(
+        buildAttachmentPayload(pdfBase64, `${slug}.pdf`, `Q-PROS guide PDF for ${bundle.session.title}`)
+      )
+    });
+    runAttachmentCount += 1;
+  }
+
+  await azureFetchJson(azureRunUrl(config.org, config.project, runId), config.pat, {
+    method: "PATCH",
+    body: JSON.stringify(buildCompleteRunPayload())
+  });
+
+  return {
+    runId,
+    resultId,
+    runWebUrl: azureRunWebUrl(config.org, config.project, runId),
+    attachmentCount,
+    runAttachmentCount
+  };
+}
+
 async function handleMessage(message: AppMessage, sender: chrome.runtime.MessageSender): Promise<AppResponse> {
   try {
     if (message.type === "recording:start") return ok(await startRecording(message));
@@ -757,6 +946,14 @@ async function handleMessage(message: AppMessage, sender: chrome.runtime.Message
     if (message.type === "storage:estimate") return ok(await storageEstimate());
     if (message.type === "storage:clear") return ok(await clearStorage());
     if (message.type === "export:create") return ok(await createExport(message));
+    if (message.type === "azure:get-config") {
+      const config = await getAzureConfig();
+      return ok(redactAzureConfig(config ?? { org: "", project: "" }));
+    }
+    if (message.type === "azure:save-config") return ok(await saveAzureConfig(message.config));
+    if (message.type === "azure:clear-config") return ok(await clearAzureConfig());
+    if (message.type === "azure:test-connection") return ok(await testAzureConnection());
+    if (message.type === "azure:push-run") return ok(await pushSessionToAzure(message));
     return fail("Unknown message");
   } catch (error) {
     console.error("[Q-PROS] handleMessage error:", error);

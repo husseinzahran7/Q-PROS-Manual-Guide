@@ -140,7 +140,45 @@ const dict = {
   "overlay.steps": { en: "{n} steps", zh: "{n} 步" },
   "overlay.capturing": { en: "· capturing…", zh: "· 记录中…" },
   "overlay.complete": { en: "· ✓ step {n} saved", zh: "· ✓ 第 {n} 步已记录，可继续" },
-  "overlay.paused": { en: "· paused", zh: "· 已暂停" }
+  "overlay.paused": { en: "· paused", zh: "· 已暂停" },
+  // Azure DevOps Test push (MVP)
+  "azure.title": { en: "Push to Azure Test", zh: "推送到 Azure Test" },
+  "azure.patNote": {
+    en: "PAT is stored only in this browser (local). It is sent as an auth header and never logged or synced.",
+    zh: "PAT 仅保存在本机浏览器（local），只用作鉴权请求头，不记录、不同步。"
+  },
+  "azure.org": { en: "Organization", zh: "组织" },
+  "azure.project": { en: "Project", zh: "项目" },
+  "azure.pat": { en: "Personal Access Token", zh: "个人访问令牌" },
+  "azure.patSaved": { en: "Saved — enter a new one to replace", zh: "已保存——输入新值可替换" },
+  "azure.runName": { en: "Run name", zh: "运行名称" },
+  "azure.reuseRun": { en: "Reuse run (optional)", zh: "复用运行（可选）" },
+  "azure.reuseRunHint": { en: "Run ID or run URL — blank creates a new run", zh: "运行 ID 或 URL——留空则新建" },
+  "azure.includePdf": { en: "Also attach guide PDF to the run", zh: "同时将指南 PDF 附加到运行" },
+  "azure.save": { en: "Save", zh: "保存" },
+  "azure.saving": { en: "Saving…", zh: "保存中…" },
+  "azure.test": { en: "Test connection", zh: "测试连接" },
+  "azure.testing": { en: "Testing…", zh: "测试中…" },
+  "azure.push": { en: "Push screenshots", zh: "推送截图" },
+  "azure.pushing": { en: "Pushing…", zh: "推送中…" },
+  "azure.saved": { en: "Azure settings saved locally.", zh: "Azure 设置已保存在本地。" },
+  "azure.saveFailed": { en: "Could not save Azure settings.", zh: "保存 Azure 设置失败。" },
+  "azure.testFailed": { en: "Connection test failed.", zh: "连接测试失败。" },
+  "azure.testOk": { en: "Connected — project found.", zh: "已连接——找到该项目。" },
+  "azure.testOkNoProject": {
+    en: "Connected, but project not found ({n} projects visible). Check the name.",
+    zh: "已连接，但未找到该项目（可见 {n} 个项目）。请检查名称。"
+  },
+  "azure.pushFailed": { en: "Push to Azure failed.", zh: "推送到 Azure 失败。" },
+  "azure.badRunId": {
+    en: "That run reference is not a numeric ID or run URL.",
+    zh: "该运行引用不是数字 ID 或运行 URL。"
+  },
+  "azure.pushOk": {
+    en: "Pushed {n} screenshots to run {run} (result {result}).",
+    zh: "已推送 {n} 张截图到运行 {run}（结果 {result}）。"
+  },
+  "azure.openRun": { en: "Open run {run} in Azure", zh: "在 Azure 中打开运行 {run}" }
 } satisfies Record<string, Entry>;
 
 export type MessageKey = keyof typeof dict;

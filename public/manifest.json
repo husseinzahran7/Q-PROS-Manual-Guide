@@ -50,7 +50,7 @@
     }
   ],
   "permissions": ["activeTab", "tabs", "storage", "scripting", "sidePanel", "downloads"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": ["<all_urls>", "https://dev.azure.com/*", "https://*.visualstudio.com/*"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com"
   },

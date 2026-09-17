@@ -195,7 +195,18 @@ export type AppMessage =
   | { type: "session:delete"; sessionId: string }
   | { type: "storage:estimate" }
   | { type: "storage:clear" }
-  | { type: "export:create"; sessionId: string; exportType: ExportType };
+  | { type: "export:create"; sessionId: string; exportType: ExportType }
+  | { type: "azure:get-config" }
+  | { type: "azure:save-config"; config: { org: string; project: string; pat: string } }
+  | { type: "azure:clear-config" }
+  | { type: "azure:test-connection" }
+  | {
+      type: "azure:push-run";
+      sessionId: string;
+      runName?: string;
+      runId?: number;
+      includePdf?: boolean;
+    };
 
 export interface StorageEstimate {
   usageBytes: number;
