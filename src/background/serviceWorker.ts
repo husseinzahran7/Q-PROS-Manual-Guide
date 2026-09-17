@@ -653,13 +653,13 @@ const EXPORT_EXTENSION: Record<ExportType, string> = {
   pdf: "pdf"
 };
 
-function blobToDataUri(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+async function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  try {
+    await chrome.downloads.download({ url, filename, saveAs: true });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
 }
 
 async function createExport(message: Extract<AppMessage, { type: "export:create" }>) {
@@ -678,8 +678,7 @@ async function createExport(message: Extract<AppMessage, { type: "export:create"
   if (message.exportType === "docx") {
     try {
       const blob = await generateDocx(bundle);
-      const dataUri = await blobToDataUri(blob);
-      await chrome.downloads.download({ url: dataUri, filename: exportRecord.filename, saveAs: true });
+      await downloadBlob(blob, exportRecord.filename);
       return { record: exportRecord, success: true };
     } catch (error) {
       return { record: exportRecord, error: error instanceof Error ? error.message : "Export failed" };
@@ -690,8 +689,7 @@ async function createExport(message: Extract<AppMessage, { type: "export:create"
   if (message.exportType === "pdf") {
     try {
       const blob = await generatePdf(bundle);
-      const dataUri = await blobToDataUri(blob);
-      await chrome.downloads.download({ url: dataUri, filename: exportRecord.filename, saveAs: true });
+      await downloadBlob(blob, exportRecord.filename);
       return { record: exportRecord, success: true };
     } catch (error) {
       return { record: exportRecord, error: error instanceof Error ? error.message : "Export failed" };
