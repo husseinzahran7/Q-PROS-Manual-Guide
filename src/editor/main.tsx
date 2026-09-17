@@ -269,6 +269,22 @@ function Editor() {
     await loadStorage();
   }
 
+  async function pruneOld() {
+    if (!confirm(t("editor.confirmPrune"))) return;
+    const response = await sendMessage<string[]>({ type: "storage:prune", keepNewest: 10 });
+    if (!response.ok) {
+      showError(response.error);
+      return;
+    }
+    setToast({ message: `Pruned ${response.data.length} old recording(s)`, kind: "success" });
+    await loadSessions();
+    await loadStorage();
+    if (selectedId && response.data.includes(selectedId)) {
+      setSelectedId(undefined);
+      setBundle(null);
+    }
+  }
+
   async function deleteSessionAt(sessionId: string) {
     if (!confirm(t("editor.confirmDeleteSession"))) return;
     const response = await sendMessage({ type: "session:delete", sessionId });
@@ -339,6 +355,12 @@ function Editor() {
                 {t("editor.storage", { n: storage.sessionCount, usage: formatBytes(storage.usageBytes) })}
                 {storage.quotaBytes ? ` / ${formatBytes(storage.quotaBytes)}` : ""}
               </span>
+              {storage.warning ? (
+                <span className="errorBanner">{t("editor.storageWarn", { msg: storage.warning })}</span>
+              ) : null}
+              {storage.sessionCount > 1 ? (
+                <button className="small" onClick={() => void pruneOld()}><Trash2 size={12} /> {t("editor.pruneOld")}</button>
+              ) : null}
               {storage.sessionCount > 0 ? (
                 <button className="danger small" onClick={() => void clearAll()}><Trash2 size={12} /> {t("editor.clearAll")}</button>
               ) : null}

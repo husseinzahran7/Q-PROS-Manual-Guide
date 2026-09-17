@@ -1,5 +1,15 @@
 import { db, getSessionBundle } from "../shared/db";
 import { RecentActionDeduper } from "../shared/actionIntegrity";
+import {
+  DEFAULT_KEEP_NEWEST,
+  ESTIMATED_BYTES_PER_STEP,
+  MAX_SESSION_SCREENSHOT_BYTES,
+  dataUrlBytes,
+  getShotRenderParams,
+  getStorageWarning,
+  isRecordingTab,
+  pickSessionsToPrune
+} from "../shared/storageLifecycle";
 import { generateDevtoolsRecorderJson, generateHumanGuide, generatePlaywright, generateSkillPackBase64 } from "../shared/exporters";
 import { generateDocx } from "../shared/exportDocx";
 import { generatePdf } from "../shared/exportPdf";
@@ -10,25 +20,12 @@ const STATE_KEY = "recordingState";
 const SCREENSHOT_MIN_INTERVAL_MS = 600;
 const PAGE_HOOKS_SCRIPT_ID = "browser-agent-page-hooks";
 
-async function registerPageHooks() {
-  try {
-    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [PAGE_HOOKS_SCRIPT_ID] });
-    if (existing.length) return;
-    await chrome.scripting.registerContentScripts([
-      {
-        id: PAGE_HOOKS_SCRIPT_ID,
-        matches: ["<all_urls>"],
-        js: ["page-hooks.js"],
-        runAt: "document_start",
-        world: "MAIN",
-        allFrames: true,
-        matchOriginAsFallback: true
-      } as chrome.scripting.RegisteredContentScript
-    ]);
-  } catch {
-    /* page-hooks may already be registered (race) or scripting disabled */
-  }
-}
+/* Thread 7: page hooks are scoped to recording tabIds only (per-tab
+   executeScript). We intentionally do NOT register a global
+   "<all_urls>" content script here — unrelated tabs stay unhooked and
+   their events are dropped by the tabIds gate in action:record.
+   unregisterPageHooks below only cleans legacy global registrations
+   from older installs on stop. */
 
 async function unregisterPageHooks() {
   try {
@@ -166,9 +163,8 @@ async function startRecording(message: Extract<AppMessage, { type: "recording:st
   // overlay only appears once the (batched) storage event lands.
   await chrome.tabs.sendMessage(tab.id, { type: "recording:sync" }).catch(() => undefined);
   // MAIN-world hooks let us observe alert/confirm/prompt/print/beforeunload.
-  // Register globally so navigations don't strip them, plus inject on the
-  // active tab immediately for the current page that's already loaded.
-  await registerPageHooks();
+  // Thread 7: inject per recording tab only (no global registerContentScripts)
+  // so unrelated tabs have no hooks. Re-injected on navigation via onUpdated.
   await ensurePageHooksOnTab(tab?.id);
   // Capture the starting page as visible step 1 (URL + screenshot) so the
   // recording is self-contained and the user can verify capture is live.
@@ -259,6 +255,8 @@ function scheduleScreenshot(windowId: number | undefined): Promise<string | unde
 // Cap stored screenshots so a long recording doesn't balloon IndexedDB. Retina
 // captures are 2x+ the CSS viewport; downscaling to this width plus JPEG
 // encoding typically cuts each shot from hundreds of KB to a few tens of KB.
+// Thread 7: params degrade further via getShotRenderParams() as a session
+// approaches MAX_SESSION_SCREENSHOT_BYTES (auto-downsample).
 const MAX_SHOT_WIDTH = 1400;
 const SHOT_QUALITY = 0.82;
 
@@ -274,12 +272,15 @@ interface ShotInfo {
 // never loses the screenshot.
 async function renderScreenshot(
   dataUrl: string,
-  paint?: (ctx: OffscreenCanvasRenderingContext2D, info: ShotInfo) => void
+  paint?: (ctx: OffscreenCanvasRenderingContext2D, info: ShotInfo) => void,
+  opts?: { maxWidth?: number; quality?: number }
 ): Promise<string> {
   try {
+    const maxWidth = opts?.maxWidth ?? MAX_SHOT_WIDTH;
+    const quality = opts?.quality ?? SHOT_QUALITY;
     const blob = await (await fetch(dataUrl)).blob();
     const bitmap = await createImageBitmap(blob);
-    const scale = Math.min(1, MAX_SHOT_WIDTH / bitmap.width);
+    const scale = Math.min(1, maxWidth / bitmap.width);
     const width = Math.max(1, Math.round(bitmap.width * scale));
     const height = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = new OffscreenCanvas(width, height);
@@ -287,7 +288,7 @@ async function renderScreenshot(
     if (!ctx) return dataUrl;
     ctx.drawImage(bitmap, 0, 0, width, height);
     paint?.(ctx, { scale, width, height });
-    const out = await canvas.convertToBlob({ type: "image/jpeg", quality: SHOT_QUALITY });
+    const out = await canvas.convertToBlob({ type: "image/jpeg", quality });
     const buffer = new Uint8Array(await out.arrayBuffer());
     let binary = "";
     for (let i = 0; i < buffer.length; i += 1) binary += String.fromCharCode(buffer[i]);
@@ -310,8 +311,14 @@ function boxInImage(payload: ActionPayload, scale: number) {
 // taken at action time (pre-change), so the element is present and its recorded
 // box maps onto this frame. Full-page targets (e.g. dialog stand-ins) and
 // navigation steps have no meaningful element box, so they're left unringed.
-function annotateScreenshot(dataUrl: string, payload: ActionPayload): Promise<string> {
-  return renderScreenshot(dataUrl, (ctx, info) => {
+function annotateScreenshot(
+  dataUrl: string,
+  payload: ActionPayload,
+  opts?: { maxWidth?: number; quality?: number }
+): Promise<string> {
+  return renderScreenshot(
+    dataUrl,
+    (ctx, info) => {
     const box = boxInImage(payload, info.scale);
     if (payload.sensitive) {
       if (!box) return;
@@ -346,7 +353,9 @@ function annotateScreenshot(dataUrl: string, payload: ActionPayload): Promise<st
     ctx.lineWidth = 3;
     ctx.strokeStyle = "#E05A55";
     ctx.stroke();
-  });
+    },
+    opts
+  );
 }
 
 // Toggle the on-page REC overlay so it never appears in stored screenshots.
@@ -399,7 +408,10 @@ async function recordAction(payload: ActionPayload) {
   await setOverlayVisibility(targetTabs, false);
   const rawDataUrl = await scheduleScreenshot(tab?.windowId);
   void setOverlayVisibility(targetTabs, true);
-  const dataUrl = rawDataUrl ? await annotateScreenshot(rawDataUrl, payload) : undefined;
+  // Thread 7 auto-downsample: degrade JPEG params as the session grows so a
+  // 500-step run stays well under quota (≈40MB at 80KB/step vs 100MB cap).
+  const shotParams = getShotRenderParams(stepNumber * ESTIMATED_BYTES_PER_STEP);
+  const dataUrl = rawDataUrl ? await annotateScreenshot(rawDataUrl, payload, shotParams) : undefined;
 
   const actionId = id("action");
   const action: RecordedAction = {
@@ -631,17 +643,46 @@ async function storageEstimate(): Promise<StorageEstimate> {
     const entry = bySession.get(shot.sessionId);
     if (!entry) continue;
     entry.screenshotCount += 1;
-    // base64 → bytes ≈ length * 0.75
-    entry.screenshotBytes += Math.round((shot.dataUrl.length - (shot.dataUrl.indexOf(",") + 1)) * 0.75);
+    entry.screenshotBytes += dataUrlBytes(shot.dataUrl);
   }
+  const perSession = Array.from(bySession.entries()).map(([sessionId, entry]) => ({ sessionId, ...entry }));
+  const usageBytes = estimate.usage ?? 0;
+  const quotaBytes = estimate.quota ?? 0;
+  const { warn, reasons } = getStorageWarning({ usageBytes, quotaBytes, perSession });
   return {
-    usageBytes: estimate.usage ?? 0,
-    quotaBytes: estimate.quota ?? 0,
+    usageBytes,
+    quotaBytes,
     sessionCount: sessions.length,
     actionCount: actions.length,
     screenshotCount: screenshots.length,
-    perSession: Array.from(bySession.entries()).map(([sessionId, entry]) => ({ sessionId, ...entry }))
+    perSession,
+    warning: warn ? reasons.join("; ") : null,
+    quotaWarn: warn,
+    perSessionCapBytes: MAX_SESSION_SCREENSHOT_BYTES
   };
+}
+
+/* Thread 7: prune oldest sessions, sparing the active recording. Returns
+   deleted session ids. Used by the editor prune button to reclaim quota
+   without wiping everything (vs storage:clear). */
+async function pruneOldSessions(keepNewest: number = DEFAULT_KEEP_NEWEST): Promise<string[]> {
+  const state = await getState();
+  const all = await db.sessions.orderBy("updatedAt").toArray(); // oldest-first
+  const ids = pickSessionsToPrune(
+    all.map((s) => ({ id: s.id, updatedAt: s.updatedAt })),
+    keepNewest,
+    state.sessionId
+  );
+  if (ids.length === 0) return [];
+  await db.transaction("rw", db.sessions, db.actions, db.screenshots, db.exports, async () => {
+    for (const sessionId of ids) {
+      await db.actions.where("sessionId").equals(sessionId).delete();
+      await db.screenshots.where("sessionId").equals(sessionId).delete();
+      await db.exports.where("sessionId").equals(sessionId).delete();
+      await db.sessions.delete(sessionId);
+    }
+  });
+  return ids;
 }
 
 const EXPORT_EXTENSION: Record<ExportType, string> = {
@@ -734,12 +775,11 @@ async function handleMessage(message: AppMessage, sender: chrome.runtime.Message
       // script could leak events into the active session. sender.tab is
       // undefined for messages from the extension UI; those can also call
       // action:record (none today, but keep the path safe).
+      // Thread 7: shared isRecordingTab() helper — hooks are absent
+      // logically in unrelated tabs even if a static content script fired.
       const state = await getState();
-      const senderTabId = sender.tab?.id;
-      if (senderTabId !== undefined && state.tabIds && state.tabIds.length > 0) {
-        if (!state.tabIds.includes(senderTabId)) {
-          return ok(null);
-        }
+      if (!isRecordingTab(sender.tab?.id, state.tabIds)) {
+        return ok(null);
       }
       return ok(await enqueueActionWrite(() => recordAction(message.payload)));
     }
@@ -756,6 +796,7 @@ async function handleMessage(message: AppMessage, sender: chrome.runtime.Message
     if (message.type === "session:delete") return ok(await deleteSession(message.sessionId));
     if (message.type === "storage:estimate") return ok(await storageEstimate());
     if (message.type === "storage:clear") return ok(await clearStorage());
+    if (message.type === "storage:prune") return ok(await pruneOldSessions(message.keepNewest ?? DEFAULT_KEEP_NEWEST));
     if (message.type === "export:create") return ok(await createExport(message));
     return fail("Unknown message");
   } catch (error) {
@@ -790,9 +831,8 @@ chrome.commands?.onCommand.addListener(async (command) => {
 });
 
 // Re-attach page hooks every time a recording tab finishes loading so
-// post-navigation pages stay instrumented. registerContentScripts already
-// covers future page loads, but executeScript on completion handles the
-// race where the initial load fires before registration completes.
+// post-navigation pages stay instrumented. Thread 7: scoped to recording
+// tabIds only — unrelated tabs are never touched.
 chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   if (info.status !== "complete") return;
   const state = await getState();
@@ -823,7 +863,9 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   await ensurePageHooksOnTab(tab.id);
 });
 
-// Drop closed tabs from the gate set.
+// Drop closed tabs from the gate set (Thread 7: hook cleanup on tabRemoved/stop).
+// Per-tab MAIN-world hooks die with the page; the gate drop ensures no stale
+// tabId can ever record again, and stopRecording() clears the legacy global.
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const state = await getState();
   if (state.status !== "recording" || !state.tabIds) return;
