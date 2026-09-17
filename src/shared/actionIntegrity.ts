@@ -12,10 +12,42 @@ export function actionFingerprint(action: ActionPayload) {
   ].join("|");
 }
 
+export type DedupeSnapshot = Array<[string, number]>;
+
 export class RecentActionDeduper {
   private recent = new Map<string, number>();
 
   constructor(private readonly ttlMs = 900) {}
+
+  get size() {
+    return this.recent.size;
+  }
+
+  get ttl() {
+    return this.ttlMs;
+  }
+
+  snapshot(): DedupeSnapshot {
+    return Array.from(this.recent.entries());
+  }
+
+  restore(entries: unknown, nowMs = Date.now()) {
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries as Array<unknown>) {
+      if (!Array.isArray(entry) || entry.length !== 2) continue;
+      const [key, timestamp] = entry as [unknown, unknown];
+      if (typeof key !== "string" || typeof timestamp !== "number") continue;
+      if (!Number.isFinite(timestamp)) continue;
+      // Drop long-expired entries so a hours-old suspend doesn't pin memory.
+      // Keep a 5x TTL grace so a just-suspended SW still dedupes on wake.
+      if (nowMs - timestamp > this.ttlMs * 5) continue;
+      this.recent.set(key, timestamp);
+    }
+  }
+
+  clear() {
+    this.recent.clear();
+  }
 
   shouldAccept(action: ActionPayload, nowMs = Date.now()) {
     const fingerprint = actionFingerprint(action);

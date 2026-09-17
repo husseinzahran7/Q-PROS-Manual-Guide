@@ -30,4 +30,23 @@ describe("action integrity", () => {
     expect(deduper.shouldAccept({ ...action, clientEventId: "evt_2" }, 1200)).toBe(false);
     expect(deduper.shouldAccept({ ...action, clientEventId: "evt_3" }, 2000)).toBe(true);
   });
+
+  it("survives simulated MV3 suspend via snapshot/restore (no doubles)", () => {
+    const before = new RecentActionDeduper(900);
+    expect(before.shouldAccept(action, 1000)).toBe(true);
+    // Simulate suspend: serialize to storage, kill SW (drop instance).
+    const persisted = before.snapshot();
+    const after = new RecentActionDeduper(900);
+    after.restore(persisted, 1200);
+    expect(after.shouldAccept({ ...action, clientEventId: "evt_2" }, 1200)).toBe(false);
+    expect(after.shouldAccept({ ...action, clientEventId: "evt_3" }, 2500)).toBe(true);
+  });
+
+  it("drops expired entries on restore so old suspends don't pin memory", () => {
+    const before = new RecentActionDeduper(900);
+    expect(before.shouldAccept(action, 1000)).toBe(true);
+    const after = new RecentActionDeduper(900);
+    after.restore(before.snapshot(), 1000 + 900 * 5 + 1);
+    expect(after.size).toBe(0);
+  });
 });
