@@ -151,7 +151,7 @@ function App() {
       {/* Header */}
       <div className="sp-header">
         <h1>Q-PROS Manual Guide</h1>
-        <p>by Hussein Zahran</p>
+        <p>by Q-PROS</p>
       </div>
 
       {/* Session Selector */}

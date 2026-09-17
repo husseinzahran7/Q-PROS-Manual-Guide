@@ -304,7 +304,7 @@ function Editor() {
         <div className="topbarTitle">
           <span className="kicker">{t("editor.kicker")}</span>
           <h1>{bundle ? bundle.session.title : t("editor.title")}</h1>
-          <span className="topbarCredit">by Hussein Zahran</span>
+          <span className="topbarCredit">by Q-PROS</span>
         </div>
         <div className="topbarActions">
           <button disabled={!bundle} onClick={() => openManualFormAfter(null)}><ImagePlus size={14} /> {t("editor.addManual")}</button>

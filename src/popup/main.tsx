@@ -122,7 +122,7 @@ function Popup() {
 
       {error ? <p className="errorBanner">{error}</p> : null}
 
-      <footer className="popupCredit">Created by Hussein Zahran</footer>
+      <footer className="popupCredit">Q-PROS</footer>
     </main>
   );
 }
